@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/AudiusProject/audiusd/pkg/common"
-	"github.com/AudiusProject/audiusd/pkg/console"
 	"github.com/AudiusProject/audiusd/pkg/etl"
 	"github.com/AudiusProject/audiusd/pkg/sdk"
 	"github.com/AudiusProject/explorer/db"
+	"github.com/AudiusProject/explorer/server"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -50,11 +50,13 @@ func main() {
 	etl.SetDBURL(dbURL)
 	etl.SetCheckReadiness(false)
 
-	console := console.NewConsole(etl, nil, "prod")
-	console.Initialize()
+	srv := server.New(etl, nil, "prod")
+	srv.Initialize()
 
-	defer console.Stop()
-	if err := console.Run(); err != nil {
+	logger.Info("Starting server on :3000")
+
+	defer srv.Stop()
+	if err := srv.Start(); err != nil {
 		log.Fatal(err)
 	}
 }
