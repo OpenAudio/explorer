@@ -3,8 +3,8 @@ package server
 import (
 	"strconv"
 
-	"github.com/AudiusProject/audiusd/pkg/console/templates/pages"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/templates/pages"
+	"github.com/OpenAudio/explorer/db"
 	"github.com/labstack/echo/v4"
 )
 
@@ -33,17 +33,17 @@ func (s *Server) Rollups(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get paginated SLA rollups
-	rollupsData, err := s.etl.GetDB().GetSlaRollupsWithPagination(ctx, db.GetSlaRollupsWithPaginationParams{
+	rollupsData, err := s.db.GetSlaRollupsWithPagination(ctx, db.GetSlaRollupsWithPaginationParams{
 		Limit:  count,
 		Offset: offset,
 	})
 	if err != nil {
 		s.logger.Warn("Failed to get SLA rollups", "error", err)
-		rollupsData = []db.EtlSlaRollup{}
+		rollupsData = []db.SlaRollup{}
 	}
 
 	// Convert to pointers
-	rollups := make([]*db.EtlSlaRollup, len(rollupsData))
+	rollups := make([]*db.SlaRollup, len(rollupsData))
 	for i := range rollupsData {
 		rollups[i] = &rollupsData[i]
 	}
@@ -57,7 +57,7 @@ func (s *Server) Rollups(c echo.Context) error {
 
 	props := pages.RollupsProps{
 		Rollups:          rollups,
-		RollupValidators: []*db.EtlSlaNodeReport{}, // Not needed for rollups list view
+		RollupValidators: []*db.SlaNodeReport{}, // Not needed for rollups list view
 		CurrentPage:      page,
 		HasNext:          hasNext,
 		HasPrev:          hasPrev,

@@ -10,14 +10,14 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/AudiusProject/audiusd/pkg/console/templates"
-	"github.com/AudiusProject/audiusd/pkg/console/templates/layouts"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/db"
+	"github.com/OpenAudio/explorer/templates"
+	"github.com/OpenAudio/explorer/templates/layouts"
 )
 
 type BlockProps struct {
-	Block        *db.EtlBlock
-	Transactions []*db.EtlTransaction
+	Block        *db.Block
+	Transactions []*db.Transaction
 }
 
 func Block(props BlockProps) templ.Component {
@@ -58,9 +58,9 @@ func Block(props BlockProps) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var3 string
-			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", props.Block.BlockHeight))
+			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", props.Block.Height))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/block.templ`, Line: 21, Col: 120}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/block.templ`, Line: 21, Col: 115}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -79,9 +79,9 @@ func Block(props BlockProps) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
-			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", props.Block.BlockHeight))
+			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", props.Block.Height))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/block.templ`, Line: 30, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/block.templ`, Line: 30, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -217,7 +217,7 @@ func Block(props BlockProps) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Base(fmt.Sprintf("Block %d", props.Block.BlockHeight)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Base(fmt.Sprintf("Block %d", props.Block.Height)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

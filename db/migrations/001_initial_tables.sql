@@ -19,6 +19,7 @@ create index idx_blocks_hash on blocks(hash);
 
 -- Transactions table: stores all blockchain transactions
 create table if not exists transactions (
+    id serial,
     tx_hash text primary key,
     block_height bigint not null references blocks(height) on delete cascade,
     tx_index integer not null,
@@ -174,6 +175,39 @@ create index idx_manage_entities_block on manage_entities(block_height);
 create index idx_manage_entities_tx on manage_entities(tx_hash);
 create index idx_manage_entities_time on manage_entities(created_at desc);
 create index idx_manage_entities_composite on manage_entities(entity_type, entity_id);
+
+-- Storage Proofs: stores storage proof submissions
+create table if not exists storage_proofs (
+    id serial primary key,
+    prover_address text not null,
+    challenge_id text not null,
+    proof_data bytea,
+    block_height bigint not null references blocks(height) on delete cascade,
+    tx_hash text not null references transactions(tx_hash) on delete cascade,
+    created_at timestamp not null default now()
+);
+
+create index idx_storage_proofs_prover on storage_proofs(prover_address);
+create index idx_storage_proofs_challenge on storage_proofs(challenge_id);
+create index idx_storage_proofs_block on storage_proofs(block_height);
+create index idx_storage_proofs_tx on storage_proofs(tx_hash);
+
+-- Storage Proof Verifications: stores storage proof verification results
+create table if not exists storage_proof_verifications (
+    id serial primary key,
+    challenge_id text not null,
+    verifier_address text not null,
+    is_valid boolean not null,
+    verification_data bytea,
+    block_height bigint not null references blocks(height) on delete cascade,
+    tx_hash text not null references transactions(tx_hash) on delete cascade,
+    created_at timestamp not null default now()
+);
+
+create index idx_storage_proof_verifications_challenge on storage_proof_verifications(challenge_id);
+create index idx_storage_proof_verifications_verifier on storage_proof_verifications(verifier_address);
+create index idx_storage_proof_verifications_block on storage_proof_verifications(block_height);
+create index idx_storage_proof_verifications_tx on storage_proof_verifications(tx_hash);
 
 -- ========================================
 -- STATS TABLES (SINGLE ROW FOR ATOMIC UPDATES)
@@ -474,6 +508,8 @@ drop table if exists validator_stats cascade;
 drop table if exists transaction_windows cascade;
 drop table if exists transaction_type_stats cascade;
 drop table if exists chain_stats cascade;
+drop table if exists storage_proof_verifications cascade;
+drop table if exists storage_proofs cascade;
 drop table if exists manage_entities cascade;
 drop table if exists plays cascade;
 drop table if exists accounts cascade;

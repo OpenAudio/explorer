@@ -1,6 +1,6 @@
 package indexers
 
-import v1 "github.com/AudiusProject/audiusd/pkg/api/core/v1"
+import v1 "github.com/OpenAudio/go-openaudio/pkg/api/core/v1"
 
 type Indexer interface {
 	GetStatus() *Status

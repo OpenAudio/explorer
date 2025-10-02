@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/AudiusProject/audiusd/pkg/console/templates/pages"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/templates/pages"
+	"github.com/OpenAudio/explorer/db"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
@@ -77,7 +77,7 @@ func (s *Server) Account(c echo.Context) error {
 	offset := (page - 1) * count
 
 	ctx := c.Request().Context()
-	etlDB := s.etl.GetDB()
+	etlDB := s.db
 
 	// Parse date filters
 	var startTimestamp, endTimestamp pgtype.Timestamp
@@ -138,10 +138,10 @@ func (s *Server) Account(c echo.Context) error {
 	}
 
 	// Convert transaction rows to transactions and extract relations
-	transactions := make([]*db.EtlTransaction, len(transactionRows))
+	transactions := make([]*db.Transaction, len(transactionRows))
 	txRelations := make([]string, len(transactionRows))
 	for i, row := range transactionRows {
-		transactions[i] = &db.EtlTransaction{
+		transactions[i] = &db.Transaction{
 			ID:          row.ID,
 			TxHash:      row.TxHash,
 			BlockHeight: row.BlockHeight,

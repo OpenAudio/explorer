@@ -90,7 +90,29 @@ type SlaRollup struct {
 	CreatedAt      pgtype.Timestamp `json:"created_at"`
 }
 
+type StorageProof struct {
+	ID            int32            `json:"id"`
+	ProverAddress string           `json:"prover_address"`
+	ChallengeID   string           `json:"challenge_id"`
+	ProofData     []byte           `json:"proof_data"`
+	BlockHeight   int64            `json:"block_height"`
+	TxHash        string           `json:"tx_hash"`
+	CreatedAt     pgtype.Timestamp `json:"created_at"`
+}
+
+type StorageProofVerification struct {
+	ID               int32            `json:"id"`
+	ChallengeID      string           `json:"challenge_id"`
+	VerifierAddress  string           `json:"verifier_address"`
+	IsValid          bool             `json:"is_valid"`
+	VerificationData []byte           `json:"verification_data"`
+	BlockHeight      int64            `json:"block_height"`
+	TxHash           string           `json:"tx_hash"`
+	CreatedAt        pgtype.Timestamp `json:"created_at"`
+}
+
 type Transaction struct {
+	ID          pgtype.Int4      `json:"id"`
 	TxHash      string           `json:"tx_hash"`
 	BlockHeight int64            `json:"block_height"`
 	TxIndex     int32            `json:"tx_index"`

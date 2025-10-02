@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/AudiusProject/audiusd/pkg/console/templates/pages"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/templates/pages"
+	"github.com/OpenAudio/explorer/db"
 	"github.com/labstack/echo/v4"
 )
 
 // getTransactionsWithBlockHeights is a helper method to get transactions with their block heights
-func (s *Server) getTransactionsWithBlockHeights(ctx context.Context, limit, offset int32) ([]*db.EtlTransaction, map[string]int64, error) {
+func (s *Server) getTransactionsWithBlockHeights(ctx context.Context, limit, offset int32) ([]*db.Transaction, map[string]int64, error) {
 	// Use GetTransactionsByPage for proper offset-based pagination
-	transactions, err := s.etl.GetDB().GetTransactionsByPage(ctx, db.GetTransactionsByPageParams{
+	transactions, err := s.db.GetTransactionsByPage(ctx, db.GetTransactionsByPageParams{
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -23,7 +23,7 @@ func (s *Server) getTransactionsWithBlockHeights(ctx context.Context, limit, off
 	}
 
 	// Convert to pointers and create block heights map
-	txPointers := make([]*db.EtlTransaction, len(transactions))
+	txPointers := make([]*db.Transaction, len(transactions))
 	blockHeights := make(map[string]int64)
 	for i := range transactions {
 		txPointers[i] = &transactions[i]
@@ -87,13 +87,13 @@ func (s *Server) Transaction(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get transaction by hash
-	transaction, err := s.etl.GetDB().GetTransactionByHash(ctx, txHash)
+	transaction, err := s.db.GetTransactionByHash(ctx, txHash)
 	if err != nil {
 		return c.String(http.StatusNotFound, fmt.Sprintf("Transaction not found: %s", txHash))
 	}
 
 	// Get block info for this transaction
-	block, err := s.etl.GetDB().GetBlockByHeight(ctx, transaction.BlockHeight)
+	block, err := s.db.GetBlockByHeight(ctx, transaction.BlockHeight)
 	if err != nil {
 		s.logger.Warn("Failed to get block for transaction", "blockHeight", transaction.BlockHeight, "error", err)
 		return c.String(http.StatusNotFound, fmt.Sprintf("Block not found at height %d", transaction.BlockHeight))
@@ -103,12 +103,12 @@ func (s *Server) Transaction(c echo.Context) error {
 	var content interface{}
 	switch transaction.TxType {
 	case "play":
-		plays, err := s.etl.GetDB().GetPlaysByTxHash(ctx, txHash)
+		plays, err := s.db.GetPlaysByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get plays for transaction", "txHash", txHash, "error", err)
 		} else if len(plays) > 0 {
 			// Convert to pointers for template
-			playPointers := make([]*db.EtlPlay, len(plays))
+			playPointers := make([]*db.Play, len(plays))
 			for i := range plays {
 				playPointers[i] = &plays[i]
 			}
@@ -116,7 +116,7 @@ func (s *Server) Transaction(c echo.Context) error {
 		}
 
 	case "manage_entity":
-		entity, err := s.etl.GetDB().GetManageEntityByTxHash(ctx, txHash)
+		entity, err := s.db.GetManageEntityByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get manage entity for transaction", "txHash", txHash, "error", err)
 		} else {
@@ -124,7 +124,7 @@ func (s *Server) Transaction(c echo.Context) error {
 		}
 
 	case "validator_registration":
-		registration, err := s.etl.GetDB().GetValidatorRegistrationByTxHash(ctx, txHash)
+		registration, err := s.db.GetValidatorRegistrationByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get validator registration for transaction", "txHash", txHash, "error", err)
 		} else {
@@ -132,7 +132,7 @@ func (s *Server) Transaction(c echo.Context) error {
 		}
 
 	case "validator_deregistration":
-		deregistration, err := s.etl.GetDB().GetValidatorDeregistrationByTxHash(ctx, txHash)
+		deregistration, err := s.db.GetValidatorDeregistrationByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get validator deregistration for transaction", "txHash", txHash, "error", err)
 		} else {
@@ -140,7 +140,7 @@ func (s *Server) Transaction(c echo.Context) error {
 		}
 
 	case "sla_rollup":
-		slaRollup, err := s.etl.GetDB().GetSlaRollupByTxHash(ctx, txHash)
+		slaRollup, err := s.db.GetSlaRollupByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get SLA rollup for transaction", "txHash", txHash, "error", err)
 		} else {
@@ -148,7 +148,7 @@ func (s *Server) Transaction(c echo.Context) error {
 		}
 
 	case "storage_proof":
-		storageProof, err := s.etl.GetDB().GetStorageProofByTxHash(ctx, txHash)
+		storageProof, err := s.db.GetStorageProofByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get storage proof for transaction", "txHash", txHash, "error", err)
 		} else {
@@ -156,7 +156,7 @@ func (s *Server) Transaction(c echo.Context) error {
 		}
 
 	case "storage_proof_verification":
-		storageProofVerification, err := s.etl.GetDB().GetStorageProofVerificationByTxHash(ctx, txHash)
+		storageProofVerification, err := s.db.GetStorageProofVerificationByTxHash(ctx, txHash)
 		if err != nil {
 			s.logger.Warn("Failed to get storage proof verification for transaction", "txHash", txHash, "error", err)
 		} else {

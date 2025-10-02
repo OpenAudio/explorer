@@ -156,6 +156,61 @@ func (q *Queries) GetAccountByUserID(ctx context.Context, userID pgtype.Text) (A
 	return i, err
 }
 
+const getActiveValidatorCount = `-- name: GetActiveValidatorCount :one
+select count(*) from validators where status = 'active'
+`
+
+func (q *Queries) GetActiveValidatorCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, getActiveValidatorCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getActiveValidators = `-- name: GetActiveValidators :many
+select address, comet_address, endpoint, node_type, spid, voting_power, status, registered_at, deregistered_at, created_at, updated_at from validators
+where status = 'active'
+order by voting_power desc
+limit $1 offset $2
+`
+
+type GetActiveValidatorsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetActiveValidators(ctx context.Context, arg GetActiveValidatorsParams) ([]Validator, error) {
+	rows, err := q.db.Query(ctx, getActiveValidators, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Validator
+	for rows.Next() {
+		var i Validator
+		if err := rows.Scan(
+			&i.Address,
+			&i.CometAddress,
+			&i.Endpoint,
+			&i.NodeType,
+			&i.Spid,
+			&i.VotingPower,
+			&i.Status,
+			&i.RegisteredAt,
+			&i.DeregisteredAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getBlock = `-- name: GetBlock :one
 
 select height, hash, block_time, proposer_address, data, created_at from blocks where height = $1
@@ -196,6 +251,73 @@ func (q *Queries) GetBlockByHash(ctx context.Context, hash string) (Block, error
 	return i, err
 }
 
+const getBlockByHeight = `-- name: GetBlockByHeight :one
+select height, hash, block_time, proposer_address, data, created_at from blocks where height = $1
+`
+
+func (q *Queries) GetBlockByHeight(ctx context.Context, height int64) (Block, error) {
+	row := q.db.QueryRow(ctx, getBlockByHeight, height)
+	var i Block
+	err := row.Scan(
+		&i.Height,
+		&i.Hash,
+		&i.BlockTime,
+		&i.ProposerAddress,
+		&i.Data,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getBlockTransactionCount = `-- name: GetBlockTransactionCount :one
+select count(*) from transactions where block_height = $1
+`
+
+func (q *Queries) GetBlockTransactionCount(ctx context.Context, blockHeight int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getBlockTransactionCount, blockHeight)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getBlocksByPage = `-- name: GetBlocksByPage :many
+select height, hash, block_time, proposer_address, data, created_at from blocks
+order by height desc
+limit $1 offset $2
+`
+
+type GetBlocksByPageParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetBlocksByPage(ctx context.Context, arg GetBlocksByPageParams) ([]Block, error) {
+	rows, err := q.db.Query(ctx, getBlocksByPage, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Block
+	for rows.Next() {
+		var i Block
+		if err := rows.Scan(
+			&i.Height,
+			&i.Hash,
+			&i.BlockTime,
+			&i.ProposerAddress,
+			&i.Data,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getChainStats = `-- name: GetChainStats :one
 select id, latest_block_height, latest_block_hash, latest_block_time, total_transactions, total_validators, active_validators, avg_block_time_seconds, transactions_24h, transactions_7d, transactions_30d, updated_at from chain_stats where id = 1
 `
@@ -220,8 +342,50 @@ func (q *Queries) GetChainStats(ctx context.Context) (ChainStat, error) {
 	return i, err
 }
 
-const getDashboardStats = `-- name: GetDashboardStats :one
+const getChallengeStatisticsForBlockRange = `-- name: GetChallengeStatisticsForBlockRange :many
+select
+    snr.validator_address as address,
+    sum(snr.challenges_received) as challenges_received,
+    sum(snr.challenges_failed) as challenges_failed
+from sla_node_reports snr
+join sla_rollups sr on sr.id = snr.sla_rollup_id
+where sr.block_start >= $1 and sr.block_end <= $2
+group by snr.validator_address
+`
 
+type GetChallengeStatisticsForBlockRangeParams struct {
+	BlockStart int64 `json:"block_start"`
+	BlockEnd   int64 `json:"block_end"`
+}
+
+type GetChallengeStatisticsForBlockRangeRow struct {
+	Address            string `json:"address"`
+	ChallengesReceived int64  `json:"challenges_received"`
+	ChallengesFailed   int64  `json:"challenges_failed"`
+}
+
+// Get challenge statistics for validators in a block range
+func (q *Queries) GetChallengeStatisticsForBlockRange(ctx context.Context, arg GetChallengeStatisticsForBlockRangeParams) ([]GetChallengeStatisticsForBlockRangeRow, error) {
+	rows, err := q.db.Query(ctx, getChallengeStatisticsForBlockRange, arg.BlockStart, arg.BlockEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChallengeStatisticsForBlockRangeRow
+	for rows.Next() {
+		var i GetChallengeStatisticsForBlockRangeRow
+		if err := rows.Scan(&i.Address, &i.ChallengesReceived, &i.ChallengesFailed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDashboardStats = `-- name: GetDashboardStats :one
 select
     cs.latest_block_height,
     cs.latest_block_hash,
@@ -252,9 +416,6 @@ type GetDashboardStatsRow struct {
 	CurrentActiveValidators int64            `json:"current_active_validators"`
 }
 
-// ========================================
-// dashboard queries
-// ========================================
 // Consolidated query for dashboard statistics
 func (q *Queries) GetDashboardStats(ctx context.Context) (GetDashboardStatsRow, error) {
 	row := q.db.QueryRow(ctx, getDashboardStats)
@@ -275,6 +436,110 @@ func (q *Queries) GetDashboardStats(ctx context.Context) (GetDashboardStatsRow, 
 	return i, err
 }
 
+const getDashboardTransactionStats = `-- name: GetDashboardTransactionStats :one
+select
+    total_transactions,
+    transactions_24h,
+    transactions_24h as transactions_previous_24h, -- placeholder
+    transactions_7d,
+    transactions_30d
+from chain_stats
+where id = 1
+`
+
+type GetDashboardTransactionStatsRow struct {
+	TotalTransactions       int64 `json:"total_transactions"`
+	Transactions24h         int64 `json:"transactions_24h"`
+	TransactionsPrevious24h int64 `json:"transactions_previous_24h"`
+	Transactions7d          int64 `json:"transactions_7d"`
+	Transactions30d         int64 `json:"transactions_30d"`
+}
+
+func (q *Queries) GetDashboardTransactionStats(ctx context.Context) (GetDashboardTransactionStatsRow, error) {
+	row := q.db.QueryRow(ctx, getDashboardTransactionStats)
+	var i GetDashboardTransactionStatsRow
+	err := row.Scan(
+		&i.TotalTransactions,
+		&i.Transactions24h,
+		&i.TransactionsPrevious24h,
+		&i.Transactions7d,
+		&i.Transactions30d,
+	)
+	return i, err
+}
+
+const getDashboardTransactionTypes = `-- name: GetDashboardTransactionTypes :many
+select
+    tx_type,
+    total_count as transaction_count
+from transaction_type_stats
+order by total_count desc
+`
+
+type GetDashboardTransactionTypesRow struct {
+	TxType           string `json:"tx_type"`
+	TransactionCount int64  `json:"transaction_count"`
+}
+
+func (q *Queries) GetDashboardTransactionTypes(ctx context.Context) ([]GetDashboardTransactionTypesRow, error) {
+	rows, err := q.db.Query(ctx, getDashboardTransactionTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDashboardTransactionTypesRow
+	for rows.Next() {
+		var i GetDashboardTransactionTypesRow
+		if err := rows.Scan(&i.TxType, &i.TransactionCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getHealthyValidatorCountsForRollups = `-- name: GetHealthyValidatorCountsForRollups :many
+select
+    sr.id as rollup_id,
+    count(distinct snr.validator_address) filter (
+        where snr.num_blocks_proposed >= (sr.block_quota * 0.8)
+          and (snr.challenges_received = 0 or
+               (1.0 - (snr.challenges_failed::float / snr.challenges_received)) >= 0.8)
+    ) as healthy_validators
+from sla_rollups sr
+left join sla_node_reports snr on snr.sla_rollup_id = sr.id
+where sr.id = any($1::int[])
+group by sr.id
+`
+
+type GetHealthyValidatorCountsForRollupsRow struct {
+	RollupID          int32 `json:"rollup_id"`
+	HealthyValidators int64 `json:"healthy_validators"`
+}
+
+func (q *Queries) GetHealthyValidatorCountsForRollups(ctx context.Context, dollar_1 []int32) ([]GetHealthyValidatorCountsForRollupsRow, error) {
+	rows, err := q.db.Query(ctx, getHealthyValidatorCountsForRollups, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetHealthyValidatorCountsForRollupsRow
+	for rows.Next() {
+		var i GetHealthyValidatorCountsForRollupsRow
+		if err := rows.Scan(&i.RollupID, &i.HealthyValidators); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLatestBlock = `-- name: GetLatestBlock :one
 select height, hash, block_time, proposer_address, data, created_at from blocks order by height desc limit 1
 `
@@ -291,6 +556,21 @@ func (q *Queries) GetLatestBlock(ctx context.Context) (Block, error) {
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getLatestIndexedBlock = `-- name: GetLatestIndexedBlock :one
+
+select coalesce(max(height), 0) from blocks
+`
+
+// ========================================
+// dashboard queries
+// ========================================
+func (q *Queries) GetLatestIndexedBlock(ctx context.Context) (interface{}, error) {
+	row := q.db.QueryRow(ctx, getLatestIndexedBlock)
+	var coalesce interface{}
+	err := row.Scan(&coalesce)
+	return coalesce, err
 }
 
 const getLatestSLARollup = `-- name: GetLatestSLARollup :one
@@ -533,6 +813,30 @@ func (q *Queries) GetManageEntity(ctx context.Context, id int32) (ManageEntity, 
 	return i, err
 }
 
+const getManageEntityByTxHash = `-- name: GetManageEntityByTxHash :one
+select id, address, entity_type, entity_id, action, metadata, signature, signer, nonce, block_height, tx_hash, created_at from manage_entities where tx_hash = $1
+`
+
+func (q *Queries) GetManageEntityByTxHash(ctx context.Context, txHash string) (ManageEntity, error) {
+	row := q.db.QueryRow(ctx, getManageEntityByTxHash, txHash)
+	var i ManageEntity
+	err := row.Scan(
+		&i.ID,
+		&i.Address,
+		&i.EntityType,
+		&i.EntityID,
+		&i.Action,
+		&i.Metadata,
+		&i.Signature,
+		&i.Signer,
+		&i.Nonce,
+		&i.BlockHeight,
+		&i.TxHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getPlay = `-- name: GetPlay :one
 
 select id, user_id, track_id, city, region, country, latitude, longitude, played_at, listened_at, recorded_at, block_height, tx_hash, created_at from plays where id = $1
@@ -626,6 +930,47 @@ type GetPlaysByTrackParams struct {
 
 func (q *Queries) GetPlaysByTrack(ctx context.Context, arg GetPlaysByTrackParams) ([]Play, error) {
 	rows, err := q.db.Query(ctx, getPlaysByTrack, arg.TrackID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Play
+	for rows.Next() {
+		var i Play
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TrackID,
+			&i.City,
+			&i.Region,
+			&i.Country,
+			&i.Latitude,
+			&i.Longitude,
+			&i.PlayedAt,
+			&i.ListenedAt,
+			&i.RecordedAt,
+			&i.BlockHeight,
+			&i.TxHash,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPlaysByTxHash = `-- name: GetPlaysByTxHash :many
+select id, user_id, track_id, city, region, country, latitude, longitude, played_at, listened_at, recorded_at, block_height, tx_hash, created_at from plays
+where tx_hash = $1
+order by played_at desc
+`
+
+func (q *Queries) GetPlaysByTxHash(ctx context.Context, txHash string) ([]Play, error) {
+	rows, err := q.db.Query(ctx, getPlaysByTxHash, txHash)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +1202,7 @@ func (q *Queries) GetRecentSLARollups(ctx context.Context, limit int32) ([]SlaRo
 }
 
 const getRecentTransactions = `-- name: GetRecentTransactions :many
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
 order by created_at desc
 limit $1
 `
@@ -872,6 +1217,7 @@ func (q *Queries) GetRecentTransactions(ctx context.Context, limit int32) ([]Tra
 	for rows.Next() {
 		var i Transaction
 		if err := rows.Scan(
+			&i.ID,
 			&i.TxHash,
 			&i.BlockHeight,
 			&i.TxIndex,
@@ -884,6 +1230,36 @@ func (q *Queries) GetRecentTransactions(ctx context.Context, limit int32) ([]Tra
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRelationTypesByAddress = `-- name: GetRelationTypesByAddress :many
+select distinct case
+    when t.sender = lower($1) then 'sender'
+    when t.proposer = lower($1) then 'proposer'
+    else 'unknown'
+end as relation
+from transactions t
+where lower(t.sender) = lower($1) or lower(t.proposer) = lower($1)
+`
+
+func (q *Queries) GetRelationTypesByAddress(ctx context.Context, lower string) ([]string, error) {
+	rows, err := q.db.Query(ctx, getRelationTypesByAddress, lower)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var relation string
+		if err := rows.Scan(&relation); err != nil {
+			return nil, err
+		}
+		items = append(items, relation)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1003,9 +1379,172 @@ func (q *Queries) GetSLARollup(ctx context.Context, id int32) (SlaRollup, error)
 	return i, err
 }
 
+const getSlaNodeReportsByAddress = `-- name: GetSlaNodeReportsByAddress :many
+select id, sla_rollup_id, validator_address, num_blocks_proposed, challenges_received, challenges_failed, created_at from sla_node_reports
+where validator_address = lower($1)
+order by sla_rollup_id desc
+limit $2
+`
+
+type GetSlaNodeReportsByAddressParams struct {
+	Lower string `json:"lower"`
+	Limit int32  `json:"limit"`
+}
+
+func (q *Queries) GetSlaNodeReportsByAddress(ctx context.Context, arg GetSlaNodeReportsByAddressParams) ([]SlaNodeReport, error) {
+	rows, err := q.db.Query(ctx, getSlaNodeReportsByAddress, arg.Lower, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SlaNodeReport
+	for rows.Next() {
+		var i SlaNodeReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.SlaRollupID,
+			&i.ValidatorAddress,
+			&i.NumBlocksProposed,
+			&i.ChallengesReceived,
+			&i.ChallengesFailed,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSlaRollupById = `-- name: GetSlaRollupById :one
+select id, block_start, block_end, validator_count, block_quota, tx_hash, block_height, created_at from sla_rollups where id = $1
+`
+
+func (q *Queries) GetSlaRollupById(ctx context.Context, id int32) (SlaRollup, error) {
+	row := q.db.QueryRow(ctx, getSlaRollupById, id)
+	var i SlaRollup
+	err := row.Scan(
+		&i.ID,
+		&i.BlockStart,
+		&i.BlockEnd,
+		&i.ValidatorCount,
+		&i.BlockQuota,
+		&i.TxHash,
+		&i.BlockHeight,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSlaRollupByTxHash = `-- name: GetSlaRollupByTxHash :one
+select id, block_start, block_end, validator_count, block_quota, tx_hash, block_height, created_at from sla_rollups where tx_hash = $1
+`
+
+func (q *Queries) GetSlaRollupByTxHash(ctx context.Context, txHash string) (SlaRollup, error) {
+	row := q.db.QueryRow(ctx, getSlaRollupByTxHash, txHash)
+	var i SlaRollup
+	err := row.Scan(
+		&i.ID,
+		&i.BlockStart,
+		&i.BlockEnd,
+		&i.ValidatorCount,
+		&i.BlockQuota,
+		&i.TxHash,
+		&i.BlockHeight,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSlaRollupsWithPagination = `-- name: GetSlaRollupsWithPagination :many
+select id, block_start, block_end, validator_count, block_quota, tx_hash, block_height, created_at from sla_rollups
+order by id desc
+limit $1 offset $2
+`
+
+type GetSlaRollupsWithPaginationParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetSlaRollupsWithPagination(ctx context.Context, arg GetSlaRollupsWithPaginationParams) ([]SlaRollup, error) {
+	rows, err := q.db.Query(ctx, getSlaRollupsWithPagination, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SlaRollup
+	for rows.Next() {
+		var i SlaRollup
+		if err := rows.Scan(
+			&i.ID,
+			&i.BlockStart,
+			&i.BlockEnd,
+			&i.ValidatorCount,
+			&i.BlockQuota,
+			&i.TxHash,
+			&i.BlockHeight,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStorageProofByTxHash = `-- name: GetStorageProofByTxHash :one
+
+select id, prover_address, challenge_id, proof_data, block_height, tx_hash, created_at from storage_proofs where tx_hash = $1
+`
+
+// ========================================
+// storage proofs queries
+// ========================================
+func (q *Queries) GetStorageProofByTxHash(ctx context.Context, txHash string) (StorageProof, error) {
+	row := q.db.QueryRow(ctx, getStorageProofByTxHash, txHash)
+	var i StorageProof
+	err := row.Scan(
+		&i.ID,
+		&i.ProverAddress,
+		&i.ChallengeID,
+		&i.ProofData,
+		&i.BlockHeight,
+		&i.TxHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getStorageProofVerificationByTxHash = `-- name: GetStorageProofVerificationByTxHash :one
+select id, challenge_id, verifier_address, is_valid, verification_data, block_height, tx_hash, created_at from storage_proof_verifications where tx_hash = $1
+`
+
+func (q *Queries) GetStorageProofVerificationByTxHash(ctx context.Context, txHash string) (StorageProofVerification, error) {
+	row := q.db.QueryRow(ctx, getStorageProofVerificationByTxHash, txHash)
+	var i StorageProofVerification
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengeID,
+		&i.VerifierAddress,
+		&i.IsValid,
+		&i.VerificationData,
+		&i.BlockHeight,
+		&i.TxHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getTransaction = `-- name: GetTransaction :one
 
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions where tx_hash = $1
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions where tx_hash = $1
 `
 
 // ========================================
@@ -1015,6 +1554,7 @@ func (q *Queries) GetTransaction(ctx context.Context, txHash string) (Transactio
 	row := q.db.QueryRow(ctx, getTransaction, txHash)
 	var i Transaction
 	err := row.Scan(
+		&i.ID,
 		&i.TxHash,
 		&i.BlockHeight,
 		&i.TxIndex,
@@ -1061,6 +1601,59 @@ func (q *Queries) GetTransactionBreakdown(ctx context.Context) ([]GetTransaction
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTransactionByHash = `-- name: GetTransactionByHash :one
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions where tx_hash = $1
+`
+
+func (q *Queries) GetTransactionByHash(ctx context.Context, txHash string) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionByHash, txHash)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.TxHash,
+		&i.BlockHeight,
+		&i.TxIndex,
+		&i.TxType,
+		&i.Proposer,
+		&i.Sender,
+		&i.Data,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTransactionCountByAddress = `-- name: GetTransactionCountByAddress :one
+select count(*)
+from transactions t
+where (lower(t.sender) = lower($1) or lower(t.proposer) = lower($1))
+  and ($2 = '' or case
+        when t.sender = lower($1) then 'sender'
+        when t.proposer = lower($1) then 'proposer'
+        else 'unknown'
+    end = $2)
+  and ($3::timestamp is null or t.created_at >= $3)
+  and ($4::timestamp is null or t.created_at <= $4)
+`
+
+type GetTransactionCountByAddressParams struct {
+	Lower   string           `json:"lower"`
+	Column2 interface{}      `json:"column_2"`
+	Column3 pgtype.Timestamp `json:"column_3"`
+	Column4 pgtype.Timestamp `json:"column_4"`
+}
+
+func (q *Queries) GetTransactionCountByAddress(ctx context.Context, arg GetTransactionCountByAddressParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getTransactionCountByAddress,
+		arg.Lower,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const getTransactionTypeStat = `-- name: GetTransactionTypeStat :one
@@ -1121,8 +1714,89 @@ func (q *Queries) GetTransactionWindowCounts(ctx context.Context) (interface{}, 
 	return get_transaction_window_counts, err
 }
 
+const getTransactionsByAddress = `-- name: GetTransactionsByAddress :many
+select
+    t.id,
+    t.tx_hash,
+    t.block_height,
+    t.tx_index,
+    t.tx_type,
+    t.created_at,
+    case
+        when t.sender = lower($1) then 'sender'
+        when t.proposer = lower($1) then 'proposer'
+        else 'unknown'
+    end as relation
+from transactions t
+where (lower(t.sender) = lower($1) or lower(t.proposer) = lower($1))
+  and ($2 = '' or case
+        when t.sender = lower($1) then 'sender'
+        when t.proposer = lower($1) then 'proposer'
+        else 'unknown'
+    end = $2)
+  and ($3::timestamp is null or t.created_at >= $3)
+  and ($4::timestamp is null or t.created_at <= $4)
+order by t.created_at desc
+limit $5 offset $6
+`
+
+type GetTransactionsByAddressParams struct {
+	Lower   string           `json:"lower"`
+	Column2 interface{}      `json:"column_2"`
+	Column3 pgtype.Timestamp `json:"column_3"`
+	Column4 pgtype.Timestamp `json:"column_4"`
+	Limit   int32            `json:"limit"`
+	Offset  int32            `json:"offset"`
+}
+
+type GetTransactionsByAddressRow struct {
+	ID          pgtype.Int4      `json:"id"`
+	TxHash      string           `json:"tx_hash"`
+	BlockHeight int64            `json:"block_height"`
+	TxIndex     int32            `json:"tx_index"`
+	TxType      string           `json:"tx_type"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+	Relation    string           `json:"relation"`
+}
+
+// Get transactions for an address with optional filters
+func (q *Queries) GetTransactionsByAddress(ctx context.Context, arg GetTransactionsByAddressParams) ([]GetTransactionsByAddressRow, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByAddress,
+		arg.Lower,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTransactionsByAddressRow
+	for rows.Next() {
+		var i GetTransactionsByAddressRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TxHash,
+			&i.BlockHeight,
+			&i.TxIndex,
+			&i.TxType,
+			&i.CreatedAt,
+			&i.Relation,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTransactionsByBlock = `-- name: GetTransactionsByBlock :many
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
 where block_height = $1
 order by tx_index asc
 `
@@ -1137,6 +1811,48 @@ func (q *Queries) GetTransactionsByBlock(ctx context.Context, blockHeight int64)
 	for rows.Next() {
 		var i Transaction
 		if err := rows.Scan(
+			&i.ID,
+			&i.TxHash,
+			&i.BlockHeight,
+			&i.TxIndex,
+			&i.TxType,
+			&i.Proposer,
+			&i.Sender,
+			&i.Data,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTransactionsByPage = `-- name: GetTransactionsByPage :many
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+order by created_at desc
+limit $1 offset $2
+`
+
+type GetTransactionsByPageParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetTransactionsByPage(ctx context.Context, arg GetTransactionsByPageParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByPage, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
 			&i.TxHash,
 			&i.BlockHeight,
 			&i.TxIndex,
@@ -1157,7 +1873,7 @@ func (q *Queries) GetTransactionsByBlock(ctx context.Context, blockHeight int64)
 }
 
 const getTransactionsByProposer = `-- name: GetTransactionsByProposer :many
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
 where proposer = $1
 order by created_at desc
 limit $2 offset $3
@@ -1179,6 +1895,7 @@ func (q *Queries) GetTransactionsByProposer(ctx context.Context, arg GetTransact
 	for rows.Next() {
 		var i Transaction
 		if err := rows.Scan(
+			&i.ID,
 			&i.TxHash,
 			&i.BlockHeight,
 			&i.TxIndex,
@@ -1199,7 +1916,7 @@ func (q *Queries) GetTransactionsByProposer(ctx context.Context, arg GetTransact
 }
 
 const getTransactionsBySender = `-- name: GetTransactionsBySender :many
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
 where sender = $1
 order by created_at desc
 limit $2 offset $3
@@ -1221,6 +1938,7 @@ func (q *Queries) GetTransactionsBySender(ctx context.Context, arg GetTransactio
 	for rows.Next() {
 		var i Transaction
 		if err := rows.Scan(
+			&i.ID,
 			&i.TxHash,
 			&i.BlockHeight,
 			&i.TxIndex,
@@ -1241,7 +1959,7 @@ func (q *Queries) GetTransactionsBySender(ctx context.Context, arg GetTransactio
 }
 
 const getTransactionsByType = `-- name: GetTransactionsByType :many
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
 where tx_type = $1
 order by created_at desc
 limit $2 offset $3
@@ -1263,6 +1981,7 @@ func (q *Queries) GetTransactionsByType(ctx context.Context, arg GetTransactions
 	for rows.Next() {
 		var i Transaction
 		if err := rows.Scan(
+			&i.ID,
 			&i.TxHash,
 			&i.BlockHeight,
 			&i.TxIndex,
@@ -1309,6 +2028,29 @@ func (q *Queries) GetValidator(ctx context.Context, address string) (Validator, 
 	return i, err
 }
 
+const getValidatorByAddress = `-- name: GetValidatorByAddress :one
+select address, comet_address, endpoint, node_type, spid, voting_power, status, registered_at, deregistered_at, created_at, updated_at from validators where address = $1
+`
+
+func (q *Queries) GetValidatorByAddress(ctx context.Context, address string) (Validator, error) {
+	row := q.db.QueryRow(ctx, getValidatorByAddress, address)
+	var i Validator
+	err := row.Scan(
+		&i.Address,
+		&i.CometAddress,
+		&i.Endpoint,
+		&i.NodeType,
+		&i.Spid,
+		&i.VotingPower,
+		&i.Status,
+		&i.RegisteredAt,
+		&i.DeregisteredAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getValidatorByCometAddress = `-- name: GetValidatorByCometAddress :one
 select address, comet_address, endpoint, node_type, spid, voting_power, status, registered_at, deregistered_at, created_at, updated_at from validators where comet_address = $1
 `
@@ -1330,6 +2072,94 @@ func (q *Queries) GetValidatorByCometAddress(ctx context.Context, cometAddress s
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getValidatorDeregistrationByTxHash = `-- name: GetValidatorDeregistrationByTxHash :one
+select id, validator_address, event_type, block_height, tx_hash, created_at from validator_events
+where tx_hash = $1 and event_type = 'deregistration'
+limit 1
+`
+
+func (q *Queries) GetValidatorDeregistrationByTxHash(ctx context.Context, txHash string) (ValidatorEvent, error) {
+	row := q.db.QueryRow(ctx, getValidatorDeregistrationByTxHash, txHash)
+	var i ValidatorEvent
+	err := row.Scan(
+		&i.ID,
+		&i.ValidatorAddress,
+		&i.EventType,
+		&i.BlockHeight,
+		&i.TxHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getValidatorDeregistrations = `-- name: GetValidatorDeregistrations :many
+select
+    ve.id,
+    ve.validator_address as comet_address,
+    ve.block_height,
+    ve.tx_hash,
+    ve.created_at,
+    v.address,
+    v.endpoint,
+    v.node_type,
+    v.spid,
+    v.voting_power
+from validator_events ve
+left join validators v on v.address = ve.validator_address
+where ve.event_type = 'deregistration'
+order by ve.created_at desc
+limit $1 offset $2
+`
+
+type GetValidatorDeregistrationsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetValidatorDeregistrationsRow struct {
+	ID           int32            `json:"id"`
+	CometAddress string           `json:"comet_address"`
+	BlockHeight  int64            `json:"block_height"`
+	TxHash       string           `json:"tx_hash"`
+	CreatedAt    pgtype.Timestamp `json:"created_at"`
+	Address      pgtype.Text      `json:"address"`
+	Endpoint     pgtype.Text      `json:"endpoint"`
+	NodeType     pgtype.Text      `json:"node_type"`
+	Spid         pgtype.Text      `json:"spid"`
+	VotingPower  pgtype.Int8      `json:"voting_power"`
+}
+
+func (q *Queries) GetValidatorDeregistrations(ctx context.Context, arg GetValidatorDeregistrationsParams) ([]GetValidatorDeregistrationsRow, error) {
+	rows, err := q.db.Query(ctx, getValidatorDeregistrations, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetValidatorDeregistrationsRow
+	for rows.Next() {
+		var i GetValidatorDeregistrationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CometAddress,
+			&i.BlockHeight,
+			&i.TxHash,
+			&i.CreatedAt,
+			&i.Address,
+			&i.Endpoint,
+			&i.NodeType,
+			&i.Spid,
+			&i.VotingPower,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getValidatorEvents = `-- name: GetValidatorEvents :many
@@ -1415,6 +2245,97 @@ func (q *Queries) GetValidatorEventsByType(ctx context.Context, arg GetValidator
 	return items, nil
 }
 
+const getValidatorRegistrationByTxHash = `-- name: GetValidatorRegistrationByTxHash :one
+select id, validator_address, event_type, block_height, tx_hash, created_at from validator_events
+where tx_hash = $1 and event_type = 'registration'
+limit 1
+`
+
+func (q *Queries) GetValidatorRegistrationByTxHash(ctx context.Context, txHash string) (ValidatorEvent, error) {
+	row := q.db.QueryRow(ctx, getValidatorRegistrationByTxHash, txHash)
+	var i ValidatorEvent
+	err := row.Scan(
+		&i.ID,
+		&i.ValidatorAddress,
+		&i.EventType,
+		&i.BlockHeight,
+		&i.TxHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getValidatorRegistrations = `-- name: GetValidatorRegistrations :many
+select
+    ve.id,
+    ve.validator_address,
+    ve.block_height,
+    ve.tx_hash,
+    ve.created_at,
+    v.address,
+    v.endpoint,
+    v.comet_address,
+    v.node_type,
+    v.spid,
+    v.voting_power
+from validator_events ve
+join validators v on v.address = ve.validator_address
+where ve.event_type = 'registration'
+order by ve.created_at desc
+limit $1 offset $2
+`
+
+type GetValidatorRegistrationsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetValidatorRegistrationsRow struct {
+	ID               int32            `json:"id"`
+	ValidatorAddress string           `json:"validator_address"`
+	BlockHeight      int64            `json:"block_height"`
+	TxHash           string           `json:"tx_hash"`
+	CreatedAt        pgtype.Timestamp `json:"created_at"`
+	Address          string           `json:"address"`
+	Endpoint         string           `json:"endpoint"`
+	CometAddress     string           `json:"comet_address"`
+	NodeType         string           `json:"node_type"`
+	Spid             string           `json:"spid"`
+	VotingPower      int64            `json:"voting_power"`
+}
+
+func (q *Queries) GetValidatorRegistrations(ctx context.Context, arg GetValidatorRegistrationsParams) ([]GetValidatorRegistrationsRow, error) {
+	rows, err := q.db.Query(ctx, getValidatorRegistrations, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetValidatorRegistrationsRow
+	for rows.Next() {
+		var i GetValidatorRegistrationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ValidatorAddress,
+			&i.BlockHeight,
+			&i.TxHash,
+			&i.CreatedAt,
+			&i.Address,
+			&i.Endpoint,
+			&i.CometAddress,
+			&i.NodeType,
+			&i.Spid,
+			&i.VotingPower,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getValidatorStats = `-- name: GetValidatorStats :one
 select validator_address, total_blocks_proposed, total_sla_rollups, sla_rollups_passed, sla_rollups_failed, last_block_proposed_height, last_sla_rollup_id, updated_at from validator_stats where validator_address = $1
 `
@@ -1482,6 +2403,64 @@ func (q *Queries) GetValidatorUptimeMap(ctx context.Context, arg GetValidatorUpt
 			&i.ChallengesReceived,
 			&i.ChallengesFailed,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getValidatorsForSlaRollup = `-- name: GetValidatorsForSlaRollup :many
+select
+    v.address, v.comet_address, v.endpoint, v.node_type, v.spid, v.voting_power, v.status, v.registered_at, v.deregistered_at, v.created_at, v.updated_at,
+    snr.num_blocks_proposed
+from validators v
+left join sla_node_reports snr on snr.validator_address = v.comet_address and snr.sla_rollup_id = $1
+where v.status = 'active'
+order by v.voting_power desc
+`
+
+type GetValidatorsForSlaRollupRow struct {
+	Address           string           `json:"address"`
+	CometAddress      string           `json:"comet_address"`
+	Endpoint          string           `json:"endpoint"`
+	NodeType          string           `json:"node_type"`
+	Spid              string           `json:"spid"`
+	VotingPower       int64            `json:"voting_power"`
+	Status            string           `json:"status"`
+	RegisteredAt      int64            `json:"registered_at"`
+	DeregisteredAt    pgtype.Int8      `json:"deregistered_at"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
+	NumBlocksProposed pgtype.Int4      `json:"num_blocks_proposed"`
+}
+
+func (q *Queries) GetValidatorsForSlaRollup(ctx context.Context, slaRollupID int32) ([]GetValidatorsForSlaRollupRow, error) {
+	rows, err := q.db.Query(ctx, getValidatorsForSlaRollup, slaRollupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetValidatorsForSlaRollupRow
+	for rows.Next() {
+		var i GetValidatorsForSlaRollupRow
+		if err := rows.Scan(
+			&i.Address,
+			&i.CometAddress,
+			&i.Endpoint,
+			&i.NodeType,
+			&i.Spid,
+			&i.VotingPower,
+			&i.Status,
+			&i.RegisteredAt,
+			&i.DeregisteredAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.NumBlocksProposed,
 		); err != nil {
 			return nil, err
 		}
@@ -1883,7 +2862,7 @@ func (q *Queries) ListSLARollups(ctx context.Context, arg ListSLARollupsParams) 
 }
 
 const listTransactions = `-- name: ListTransactions :many
-select tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
 order by created_at desc
 limit $1 offset $2
 `
@@ -1903,6 +2882,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 	for rows.Next() {
 		var i Transaction
 		if err := rows.Scan(
+			&i.ID,
 			&i.TxHash,
 			&i.BlockHeight,
 			&i.TxIndex,

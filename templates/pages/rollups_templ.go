@@ -10,9 +10,9 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/AudiusProject/audiusd/pkg/console/templates"
-	"github.com/AudiusProject/audiusd/pkg/console/templates/layouts"
-	"github.com/AudiusProject/explorer/db"
+	"github.com/OpenAudio/explorer/db"
+	"github.com/OpenAudio/explorer/templates"
+	"github.com/OpenAudio/explorer/templates/layouts"
 )
 
 type RollupsProps struct {

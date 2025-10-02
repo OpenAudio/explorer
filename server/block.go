@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/AudiusProject/audiusd/pkg/console/templates/pages"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/db"
+	"github.com/OpenAudio/explorer/templates/pages"
 	"github.com/labstack/echo/v4"
 )
 
@@ -33,24 +33,24 @@ func (s *Server) Blocks(c echo.Context) error {
 	offset := (page - 1) * count
 
 	// Get blocks from database
-	blocksData, err := s.etl.GetDB().GetBlocksByPage(c.Request().Context(), db.GetBlocksByPageParams{
+	blocksData, err := s.db.GetBlocksByPage(c.Request().Context(), db.GetBlocksByPageParams{
 		Limit:  count,
 		Offset: offset,
 	})
 	if err != nil {
 		s.logger.Warn("Failed to get blocks", "error", err)
-		blocksData = []db.EtlBlock{}
+		blocksData = []db.Block{}
 	}
 
 	// Convert to pointers
-	blocks := make([]*db.EtlBlock, len(blocksData))
+	blocks := make([]*db.Block, len(blocksData))
 	blockTransactions := make([]int32, len(blocksData))
 	for i := range blocksData {
 		blocks[i] = &blocksData[i]
 		// Get transaction count for each block
-		txCount, err := s.etl.GetDB().GetBlockTransactionCount(c.Request().Context(), blocksData[i].BlockHeight)
+		txCount, err := s.db.GetBlockTransactionCount(c.Request().Context(), blocksData[i].Height)
 		if err != nil {
-			s.logger.Warn("Failed to get transaction count for block", "height", blocksData[i].BlockHeight, "error", err)
+			s.logger.Warn("Failed to get transaction count for block", "height", blocksData[i].Height, "error", err)
 			txCount = 0
 		}
 		blockTransactions[i] = int32(txCount)
@@ -83,7 +83,7 @@ func (s *Server) Block(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get block by height
-	block, err := s.etl.GetDB().GetBlockByHeight(ctx, height)
+	block, err := s.db.GetBlockByHeight(ctx, height)
 	if err != nil {
 		return c.String(http.StatusNotFound, fmt.Sprintf("Block not found at height %d", height))
 	}
@@ -91,17 +91,17 @@ func (s *Server) Block(c echo.Context) error {
 	// Get transactions for this block
 	// First get all transactions and filter by block height
 	// This is not the most efficient but will work for now - TODO: add GetTransactionsByBlockHeight query
-	transactionsData, err := s.etl.GetDB().GetTransactionsByPage(ctx, db.GetTransactionsByPageParams{
+	transactionsData, err := s.db.GetTransactionsByPage(ctx, db.GetTransactionsByPageParams{
 		Limit:  1000, // Get a large number to ensure we get all for this block
 		Offset: 0,
 	})
 	if err != nil {
 		s.logger.Warn("Failed to get transactions", "error", err)
-		transactionsData = []db.EtlTransaction{}
+		transactionsData = []db.Transaction{}
 	}
 
 	// Filter transactions for this specific block height
-	var blockTransactions []*db.EtlTransaction
+	var blockTransactions []*db.Transaction
 	for i := range transactionsData {
 		if transactionsData[i].BlockHeight == height {
 			blockTransactions = append(blockTransactions, &transactionsData[i])

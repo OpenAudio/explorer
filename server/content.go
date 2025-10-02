@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/AudiusProject/audiusd/pkg/console/templates/pages"
+	"github.com/OpenAudio/explorer/templates/pages"
 	"github.com/labstack/echo/v4"
 )
 

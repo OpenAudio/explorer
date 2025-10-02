@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	corev1 "github.com/AudiusProject/audiusd/pkg/api/core/v1"
-	"github.com/AudiusProject/audiusd/pkg/sdk"
-	"github.com/AudiusProject/explorer/assets"
-	"github.com/AudiusProject/explorer/config"
-	"github.com/AudiusProject/explorer/db"
+	corev1 "github.com/OpenAudio/go-openaudio/pkg/api/core/v1"
+	"github.com/OpenAudio/go-openaudio/pkg/sdk"
+	"github.com/OpenAudio/explorer/assets"
+	"github.com/OpenAudio/explorer/config"
+	"github.com/OpenAudio/explorer/db"
 	"github.com/labstack/echo/v4"
 )
 
@@ -22,6 +22,7 @@ type Server struct {
 	db          *db.Queries
 	logger      *slog.Logger
 	trustedNode *sdk.AudiusdSDK
+	chainID     string
 
 	latestTrustedBlock atomic.Int64
 	lastRefreshTime    atomic.Int64  // Unix timestamp of last refresh

@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/AudiusProject/audiusd/pkg/console/templates/pages"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/db"
+	"github.com/OpenAudio/explorer/templates/pages"
 	"github.com/labstack/echo/v4"
 )
 
@@ -10,22 +10,22 @@ func (s *Server) Dashboard(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get dashboard transaction stats from materialized view
-	txStats, err := s.etl.GetDB().GetDashboardTransactionStats(ctx)
+	txStats, err := s.db.GetDashboardTransactionStats(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get dashboard transaction stats", "error", err)
 		// Use fallback empty stats
-		txStats = db.MvDashboardTransactionStat{}
+		txStats = db.DashboardTransactionStat{}
 	}
 
 	// Get transaction type breakdown from materialized view
-	txTypes, err2 := s.etl.GetDB().GetDashboardTransactionTypes(ctx)
+	txTypes, err2 := s.db.GetDashboardTransactionTypes(ctx)
 	if err2 != nil {
 		s.logger.Warn("Failed to get dashboard transaction types", "error", err2)
-		txTypes = []db.MvDashboardTransactionType{}
+		txTypes = []db.DashboardTransactionType{}
 	}
 
 	// Get latest indexed block
-	latestBlockHeight, err := s.etl.GetDB().GetLatestIndexedBlock(ctx)
+	latestBlockHeight, err := s.db.GetLatestIndexedBlock(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get latest block height", "error", err)
 		latestBlockHeight = 0
@@ -72,7 +72,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 	// Get latest SLA rollup for BPS/TPS data
 	var bps, tps float64 = 0, 0
 	var avgBlockTime float32 = 0
-	latestSlaRollup, err := s.etl.GetDB().GetLatestSlaRollup(ctx)
+	latestSlaRollup, err := s.db.GetLatestSlaRollup(ctx)
 	if err != nil {
 		s.logger.Debug("Failed to get latest SLA rollup", "error", err)
 		// Fall back to default values
@@ -94,11 +94,11 @@ func (s *Server) Dashboard(c echo.Context) error {
 	transactions, blockHeights, err := s.getTransactionsWithBlockHeights(ctx, 10, 0)
 	if err != nil {
 		s.logger.Warn("Failed to get transactions", "error", err)
-		transactions = []*db.EtlTransaction{}
+		transactions = []*db.Transaction{}
 		blockHeights = make(map[string]int64)
 	}
 
-	blocks, err := s.etl.GetDB().GetBlocksByPage(ctx, db.GetBlocksByPageParams{
+	blocks, err := s.db.GetBlocksByPage(ctx, db.GetBlocksByPageParams{
 		Limit:  10,
 		Offset: 0,
 	})
@@ -107,13 +107,13 @@ func (s *Server) Dashboard(c echo.Context) error {
 		return c.String(500, "Failed to get blocks")
 	}
 
-	blockPointers := make([]*db.EtlBlock, len(blocks))
+	blockPointers := make([]*db.Block, len(blocks))
 	for i := range blocks {
 		blockPointers[i] = &blocks[i]
 	}
 
 	// Get active validator count
-	validatorCount, err := s.etl.GetDB().GetActiveValidatorCount(ctx)
+	validatorCount, err := s.db.GetActiveValidatorCount(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get validator count", "error", err)
 		validatorCount = 0
@@ -122,7 +122,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 	// Build stats using materialized view data
 	stats := &pages.DashboardStats{
 		CurrentBlockHeight:           latestBlockHeight,
-		ChainID:                      s.etl.ChainID,
+		ChainID:                      s.chainID,
 		BPS:                          bps,
 		TPS:                          tps,
 		TotalTransactions:            txStats.TotalTransactions,
@@ -158,13 +158,13 @@ func (s *Server) Dashboard(c echo.Context) error {
 	}
 
 	// Get SLA performance data for the chart (most recent 50 rollups)
-	slaRollupsData, err := s.etl.GetDB().GetSlaRollupsWithPagination(ctx, db.GetSlaRollupsWithPaginationParams{
+	slaRollupsData, err := s.db.GetSlaRollupsWithPagination(ctx, db.GetSlaRollupsWithPaginationParams{
 		Limit:  50,
 		Offset: 0,
 	})
 	if err != nil {
 		s.logger.Warn("Failed to get SLA rollups for performance chart", "error", err)
-		slaRollupsData = []db.EtlSlaRollup{}
+		slaRollupsData = []db.SlaRollup{}
 	}
 
 	s.logger.Info("SLA rollups data retrieved", "count", len(slaRollupsData))
@@ -183,7 +183,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 		}
 
 		// Get healthy validator counts for these rollups
-		healthyValidatorData, err := s.etl.GetDB().GetHealthyValidatorCountsForRollups(ctx, rollupIDs)
+		healthyValidatorData, err := s.db.GetHealthyValidatorCountsForRollups(ctx, rollupIDs)
 		if err != nil {
 			s.logger.Warn("Failed to get healthy validator counts", "error", err)
 			healthyValidatorData = []db.GetHealthyValidatorCountsForRollupsRow{}
@@ -285,7 +285,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 	s.logger.Info("Final SLA performance data for template", "dataPoints", len(slaPerformanceData))
 
 	// Convert rollups to pointers for template
-	recentSLARollups := make([]*db.EtlSlaRollup, len(slaRollupsData))
+	recentSLARollups := make([]*db.SlaRollup, len(slaRollupsData))
 	for i := range slaRollupsData {
 		recentSLARollups[i] = &slaRollupsData[i]
 	}
@@ -311,7 +311,7 @@ func (s *Server) StatsHeaderFragment(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get latest indexed block
-	latestBlockHeight, err := s.etl.GetDB().GetLatestIndexedBlock(ctx)
+	latestBlockHeight, err := s.db.GetLatestIndexedBlock(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get latest block height", "error", err)
 		latestBlockHeight = 0
@@ -349,7 +349,7 @@ func (s *Server) StatsHeaderFragment(c echo.Context) error {
 	// Get latest SLA rollup for BPS/TPS data
 	var bps float64 = 0
 	var avgBlockTime float32 = 0
-	latestSlaRollup, err := s.etl.GetDB().GetLatestSlaRollup(ctx)
+	latestSlaRollup, err := s.db.GetLatestSlaRollup(ctx)
 	if err != nil {
 		s.logger.Debug("Failed to get latest SLA rollup", "error", err)
 		// Fall back to default values
@@ -366,7 +366,7 @@ func (s *Server) StatsHeaderFragment(c echo.Context) error {
 	}
 
 	// Get active validator count
-	validatorCount, err := s.etl.GetDB().GetActiveValidatorCount(ctx)
+	validatorCount, err := s.db.GetActiveValidatorCount(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get validator count", "error", err)
 		validatorCount = 0
@@ -374,7 +374,7 @@ func (s *Server) StatsHeaderFragment(c echo.Context) error {
 
 	stats := &pages.DashboardStats{
 		CurrentBlockHeight:  latestBlockHeight,
-		ChainID:             s.etl.ChainID,
+		ChainID:             s.chainID,
 		BPS:                 bps,
 		ValidatorCount:      validatorCount,
 		AvgBlockTime:        avgBlockTime,
@@ -394,7 +394,7 @@ func (s *Server) TPSFragment(c echo.Context) error {
 
 	// Get latest SLA rollup for TPS data
 	var tps float64 = 0
-	latestSlaRollup, err := s.etl.GetDB().GetLatestSlaRollup(ctx)
+	latestSlaRollup, err := s.db.GetLatestSlaRollup(ctx)
 	if err != nil {
 		s.logger.Debug("Failed to get latest SLA rollup", "error", err)
 		// Fall back to default value
@@ -404,10 +404,10 @@ func (s *Server) TPSFragment(c echo.Context) error {
 	}
 
 	// Get dashboard transaction stats from materialized view
-	txStats, err := s.etl.GetDB().GetDashboardTransactionStats(ctx)
+	txStats, err := s.db.GetDashboardTransactionStats(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get dashboard transaction stats", "error", err)
-		txStats = db.MvDashboardTransactionStat{}
+		txStats = db.DashboardTransactionStat{}
 	}
 
 	stats := &pages.DashboardStats{
@@ -424,10 +424,10 @@ func (s *Server) TotalTransactionsFragment(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get dashboard transaction stats from materialized view
-	txStats, err := s.etl.GetDB().GetDashboardTransactionStats(ctx)
+	txStats, err := s.db.GetDashboardTransactionStats(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get dashboard transaction stats", "error", err)
-		txStats = db.MvDashboardTransactionStat{}
+		txStats = db.DashboardTransactionStat{}
 	}
 
 	stats := &pages.DashboardStats{

@@ -30,6 +30,17 @@ select * from blocks
 order by height desc
 limit $1;
 
+-- name: GetBlocksByPage :many
+select * from blocks
+order by height desc
+limit $1 offset $2;
+
+-- name: GetBlockByHeight :one
+select * from blocks where height = $1;
+
+-- name: GetBlockTransactionCount :one
+select count(*) from transactions where block_height = $1;
+
 -- ========================================
 -- transactions queries
 -- ========================================
@@ -37,7 +48,15 @@ limit $1;
 -- name: GetTransaction :one
 select * from transactions where tx_hash = $1;
 
+-- name: GetTransactionByHash :one
+select * from transactions where tx_hash = $1;
+
 -- name: ListTransactions :many
+select * from transactions
+order by created_at desc
+limit $1 offset $2;
+
+-- name: GetTransactionsByPage :many
 select * from transactions
 order by created_at desc
 limit $1 offset $2;
@@ -85,11 +104,61 @@ order by total_count desc;
 select * from transaction_type_stats
 where tx_type = $1;
 
+-- name: GetTransactionsByAddress :many
+-- Get transactions for an address with optional filters
+select
+    t.id,
+    t.tx_hash,
+    t.block_height,
+    t.tx_index,
+    t.tx_type,
+    t.created_at,
+    case
+        when t.sender = lower($1) then 'sender'
+        when t.proposer = lower($1) then 'proposer'
+        else 'unknown'
+    end as relation
+from transactions t
+where (lower(t.sender) = lower($1) or lower(t.proposer) = lower($1))
+  and ($2 = '' or case
+        when t.sender = lower($1) then 'sender'
+        when t.proposer = lower($1) then 'proposer'
+        else 'unknown'
+    end = $2)
+  and ($3::timestamp is null or t.created_at >= $3)
+  and ($4::timestamp is null or t.created_at <= $4)
+order by t.created_at desc
+limit $5 offset $6;
+
+-- name: GetTransactionCountByAddress :one
+select count(*)
+from transactions t
+where (lower(t.sender) = lower($1) or lower(t.proposer) = lower($1))
+  and ($2 = '' or case
+        when t.sender = lower($1) then 'sender'
+        when t.proposer = lower($1) then 'proposer'
+        else 'unknown'
+    end = $2)
+  and ($3::timestamp is null or t.created_at >= $3)
+  and ($4::timestamp is null or t.created_at <= $4);
+
+-- name: GetRelationTypesByAddress :many
+select distinct case
+    when t.sender = lower($1) then 'sender'
+    when t.proposer = lower($1) then 'proposer'
+    else 'unknown'
+end as relation
+from transactions t
+where lower(t.sender) = lower($1) or lower(t.proposer) = lower($1);
+
 -- ========================================
 -- validators queries
 -- ========================================
 
 -- name: GetValidator :one
+select * from validators where address = $1;
+
+-- name: GetValidatorByAddress :one
 select * from validators where address = $1;
 
 -- name: GetValidatorByCometAddress :one
@@ -111,6 +180,15 @@ select * from validators
 where status = 'active'
 order by voting_power desc
 limit $1 offset $2;
+
+-- name: GetActiveValidators :many
+select * from validators
+where status = 'active'
+order by voting_power desc
+limit $1 offset $2;
+
+-- name: GetActiveValidatorCount :one
+select count(*) from validators where status = 'active';
 
 -- name: CountValidators :one
 select count(*) from validators;
@@ -144,6 +222,53 @@ where validator_address = $1 and event_type = $2
 order by created_at desc
 limit $3;
 
+-- name: GetValidatorRegistrationByTxHash :one
+select * from validator_events
+where tx_hash = $1 and event_type = 'registration'
+limit 1;
+
+-- name: GetValidatorDeregistrationByTxHash :one
+select * from validator_events
+where tx_hash = $1 and event_type = 'deregistration'
+limit 1;
+
+-- name: GetValidatorRegistrations :many
+select
+    ve.id,
+    ve.validator_address,
+    ve.block_height,
+    ve.tx_hash,
+    ve.created_at,
+    v.address,
+    v.endpoint,
+    v.comet_address,
+    v.node_type,
+    v.spid,
+    v.voting_power
+from validator_events ve
+join validators v on v.address = ve.validator_address
+where ve.event_type = 'registration'
+order by ve.created_at desc
+limit $1 offset $2;
+
+-- name: GetValidatorDeregistrations :many
+select
+    ve.id,
+    ve.validator_address as comet_address,
+    ve.block_height,
+    ve.tx_hash,
+    ve.created_at,
+    v.address,
+    v.endpoint,
+    v.node_type,
+    v.spid,
+    v.voting_power
+from validator_events ve
+left join validators v on v.address = ve.validator_address
+where ve.event_type = 'deregistration'
+order by ve.created_at desc
+limit $1 offset $2;
+
 -- ========================================
 -- sla rollups queries
 -- ========================================
@@ -151,12 +276,23 @@ limit $3;
 -- name: GetSLARollup :one
 select * from sla_rollups where id = $1;
 
+-- name: GetSlaRollupById :one
+select * from sla_rollups where id = $1;
+
+-- name: GetSlaRollupByTxHash :one
+select * from sla_rollups where tx_hash = $1;
+
 -- name: GetLatestSLARollup :one
 select * from sla_rollups
 order by id desc
 limit 1;
 
 -- name: ListSLARollups :many
+select * from sla_rollups
+order by id desc
+limit $1 offset $2;
+
+-- name: GetSlaRollupsWithPagination :many
 select * from sla_rollups
 order by id desc
 limit $1 offset $2;
@@ -194,6 +330,12 @@ where validator_address = $1
 order by sla_rollup_id desc
 limit $2;
 
+-- name: GetSlaNodeReportsByAddress :many
+select * from sla_node_reports
+where validator_address = lower($1)
+order by sla_rollup_id desc
+limit $2;
+
 -- name: GetValidatorUptimeMap :many
 -- Get last N SLA rollups for multiple validators
 select
@@ -209,6 +351,15 @@ where validator_address = any($1::text[])
     select id from sla_rollups order by id desc limit $2
   )
 order by validator_address, sla_rollup_id desc;
+
+-- name: GetValidatorsForSlaRollup :many
+select
+    v.*,
+    snr.num_blocks_proposed
+from validators v
+left join sla_node_reports snr on snr.validator_address = v.comet_address and snr.sla_rollup_id = $1
+where v.status = 'active'
+order by v.voting_power desc;
 
 -- ========================================
 -- accounts queries
@@ -259,12 +410,20 @@ select * from plays
 order by played_at desc
 limit $1;
 
+-- name: GetPlaysByTxHash :many
+select * from plays
+where tx_hash = $1
+order by played_at desc;
+
 -- ========================================
 -- manage entities queries
 -- ========================================
 
 -- name: GetManageEntity :one
 select * from manage_entities where id = $1;
+
+-- name: GetManageEntityByTxHash :one
+select * from manage_entities where tx_hash = $1;
 
 -- name: ListManageEntities :many
 select * from manage_entities
@@ -296,8 +455,21 @@ order by created_at desc
 limit $3 offset $4;
 
 -- ========================================
+-- storage proofs queries
+-- ========================================
+
+-- name: GetStorageProofByTxHash :one
+select * from storage_proofs where tx_hash = $1;
+
+-- name: GetStorageProofVerificationByTxHash :one
+select * from storage_proof_verifications where tx_hash = $1;
+
+-- ========================================
 -- dashboard queries
 -- ========================================
+
+-- name: GetLatestIndexedBlock :one
+select coalesce(max(height), 0) from blocks;
 
 -- name: GetDashboardStats :one
 -- Consolidated query for dashboard statistics
@@ -315,6 +487,23 @@ select
     (select count(*) from validators where status = 'active') as current_active_validators
 from chain_stats cs
 where cs.id = 1;
+
+-- name: GetDashboardTransactionStats :one
+select
+    total_transactions,
+    transactions_24h,
+    transactions_24h as transactions_previous_24h, -- placeholder
+    transactions_7d,
+    transactions_30d
+from chain_stats
+where id = 1;
+
+-- name: GetDashboardTransactionTypes :many
+select
+    tx_type,
+    total_count as transaction_count
+from transaction_type_stats
+order by total_count desc;
 
 -- name: GetTransactionBreakdown :many
 -- Get transaction type breakdown for dashboard
@@ -344,6 +533,30 @@ left join sla_node_reports snr on snr.sla_rollup_id = sr.id
 group by sr.id, sr.block_start, sr.block_end, sr.validator_count, sr.block_quota, sr.created_at
 order by sr.id desc
 limit $1;
+
+-- name: GetHealthyValidatorCountsForRollups :many
+select
+    sr.id as rollup_id,
+    count(distinct snr.validator_address) filter (
+        where snr.num_blocks_proposed >= (sr.block_quota * 0.8)
+          and (snr.challenges_received = 0 or
+               (1.0 - (snr.challenges_failed::float / snr.challenges_received)) >= 0.8)
+    ) as healthy_validators
+from sla_rollups sr
+left join sla_node_reports snr on snr.sla_rollup_id = sr.id
+where sr.id = any($1::int[])
+group by sr.id;
+
+-- name: GetChallengeStatisticsForBlockRange :many
+-- Get challenge statistics for validators in a block range
+select
+    snr.validator_address as address,
+    sum(snr.challenges_received) as challenges_received,
+    sum(snr.challenges_failed) as challenges_failed
+from sla_node_reports snr
+join sla_rollups sr on sr.id = snr.sla_rollup_id
+where sr.block_start >= $1 and sr.block_end <= $2
+group by snr.validator_address;
 
 -- ========================================
 -- validators uptime page queries

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/AudiusProject/explorer/config"
-	"github.com/AudiusProject/explorer/server"
+	"github.com/OpenAudio/explorer/config"
+	"github.com/OpenAudio/explorer/server"
 )
 
 func main() {
