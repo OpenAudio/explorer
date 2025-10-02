@@ -409,7 +409,7 @@ func ValidatorsUptimeByRollup(props ValidatorsUptimeByRollupProps) templ.Compone
 	})
 }
 
-func ValidatorsUptimeSummaryForMain(rollupData *db.EtlSlaRollup) templ.Component {
+func ValidatorsUptimeSummaryForMain(rollupData *db.SlaRollup) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -611,7 +611,7 @@ func ValidatorsUptimeSummaryForMain(rollupData *db.EtlSlaRollup) templ.Component
 	})
 }
 
-func ValidatorsUptimeSummaryForRollup(validators []*ValidatorUptimeInfo, rollupId int32, rollupData *db.EtlSlaRollup) templ.Component {
+func ValidatorsUptimeSummaryForRollup(validators []*ValidatorUptimeInfo, rollupId int32, rollupData *db.SlaRollup) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -815,7 +815,7 @@ func ValidatorsUptimeSummaryForRollup(validators []*ValidatorUptimeInfo, rollupI
 	})
 }
 
-func ValidatorsUptimeTable(validators []*ValidatorUptimeInfo, rollupData *db.EtlSlaRollup) templ.Component {
+func ValidatorsUptimeTable(validators []*ValidatorUptimeInfo, rollupData *db.SlaRollup) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {

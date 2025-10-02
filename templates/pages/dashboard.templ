@@ -16,7 +16,7 @@ type DashboardStats struct {
 	TPS                          float64
 	TotalTransactions            int64
 	ValidatorCount               int64
-	LatestBlock                  *db.EtlBlock
+	LatestBlock                  *db.Block
 	RecentProposers              []string
 	IsSyncing                    bool
 	LatestIndexedHeight          int64
@@ -367,8 +367,8 @@ templ Dashboard(props DashboardProps) {
 							for _, block := range props.RecentBlocks {
 								<div class="flex items-center justify-between py-3 px-4 border border-gray-200 dark:border-gray-700 rounded hover:bg-purple-50 hover:border-purple-200 dark:hover:bg-gray-700 transition-colors">
 									<div class="flex items-center gap-4">
-										<a href={ templ.SafeURL(fmt.Sprintf("/block/%d", block.BlockHeight)) } class="font-semibold text-purple-600 dark:text-purple-400 hover:underline">
-											{ fmt.Sprintf("#%d", block.BlockHeight) }
+										<a href={ templ.SafeURL(fmt.Sprintf("/block/%d", block.Height)) } class="font-semibold text-purple-600 dark:text-purple-400 hover:underline">
+											{ fmt.Sprintf("#%d", block.Height) }
 										</a>
 										<a href={ templ.SafeURL(fmt.Sprintf("/validator/%s", block.ProposerAddress)) } class="font-mono text-xs text-purple-600 dark:text-purple-400 hover:underline">
 											if len(block.ProposerAddress) > 8 {

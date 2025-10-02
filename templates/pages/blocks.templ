@@ -28,13 +28,13 @@ templ Blocks(props BlocksProps) {
 			if len(props.Blocks) > 0 {
 				<div class="space-y-2">
 					for i, block := range props.Blocks {
-						<a href={ templ.SafeURL(fmt.Sprintf("/block/%d", block.BlockHeight)) } class="block">
+						<a href={ templ.SafeURL(fmt.Sprintf("/block/%d", block.Height)) } class="block">
 							<div class="flex items-center justify-between py-4 px-6 border border-gray-200 dark:border-gray-700 rounded hover:bg-purple-50 hover:border-purple-200 dark:hover:bg-gray-700 transition-colors cursor-pointer">
 								<div class="flex items-center gap-6 flex-1">
 									<div class="flex-1">
 										<div class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Height</div>
 										<div class="font-semibold text-purple-600 dark:text-purple-400">
-											{ fmt.Sprintf("%d", block.BlockHeight) }
+											{ fmt.Sprintf("%d", block.Height) }
 										</div>
 									</div>
 									<div class="flex-1">
