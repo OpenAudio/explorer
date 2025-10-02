@@ -14,20 +14,25 @@ func (s *Server) Dashboard(c echo.Context) error {
 	if err != nil {
 		s.logger.Warn("Failed to get dashboard transaction stats", "error", err)
 		// Use fallback empty stats
-		txStats = db.DashboardTransactionStat{}
+		txStats = db.GetDashboardTransactionStatsRow{}
 	}
 
 	// Get transaction type breakdown from materialized view
 	txTypes, err2 := s.db.GetDashboardTransactionTypes(ctx)
 	if err2 != nil {
 		s.logger.Warn("Failed to get dashboard transaction types", "error", err2)
-		txTypes = []db.DashboardTransactionType{}
+		txTypes = []db.GetDashboardTransactionTypesRow{}
 	}
 
 	// Get latest indexed block
-	latestBlockHeight, err := s.db.GetLatestIndexedBlock(ctx)
+	latestBlockHeightRaw, err := s.db.GetLatestIndexedBlock(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get latest block height", "error", err)
+		latestBlockHeightRaw = int64(0)
+	}
+	latestBlockHeight, ok := latestBlockHeightRaw.(int64)
+	if !ok {
+		s.logger.Warn("Failed to convert latest block height to int64")
 		latestBlockHeight = 0
 	}
 
@@ -72,7 +77,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 	// Get latest SLA rollup for BPS/TPS data
 	var bps, tps float64 = 0, 0
 	var avgBlockTime float32 = 0
-	latestSlaRollup, err := s.db.GetLatestSlaRollup(ctx)
+	_, err = s.db.GetLatestSLARollup(ctx)
 	if err != nil {
 		s.logger.Debug("Failed to get latest SLA rollup", "error", err)
 		// Fall back to default values
@@ -80,14 +85,10 @@ func (s *Server) Dashboard(c echo.Context) error {
 		tps = 0.1
 		avgBlockTime = 2.0
 	} else {
-		bps = latestSlaRollup.Bps
-		tps = latestSlaRollup.Tps
-		// Calculate average block time from BPS (if BPS > 0)
-		if bps > 0 {
-			avgBlockTime = float32(1.0 / bps)
-		} else {
-			avgBlockTime = 2.0 // Default 2 seconds
-		}
+		// TODO: BPS/TPS are not in the SlaRollup struct - need to calculate or add to schema
+		bps = 0.5
+		tps = 0.1
+		avgBlockTime = 2.0
 	}
 
 	// Get some recent transactions for the dashboard
@@ -192,11 +193,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 		// Build a map for quick lookup of healthy validator counts
 		healthyValidatorsMap := make(map[int32]int32)
 		for _, hvData := range healthyValidatorData {
-			if healthyCount, ok := hvData.HealthyValidators.(int64); ok {
-				healthyValidatorsMap[hvData.RollupID] = int32(healthyCount)
-			} else {
-				healthyValidatorsMap[hvData.RollupID] = 0
-			}
+			healthyValidatorsMap[hvData.RollupID] = int32(hvData.HealthyValidators)
 		}
 
 		// Filter out invalid rollups and build valid data points
@@ -208,8 +205,6 @@ func (s *Server) Dashboard(c echo.Context) error {
 					"id", rollup.ID,
 					"blockHeight", rollup.BlockHeight,
 					"validatorCount", rollup.ValidatorCount,
-					"bps", rollup.Bps,
-					"tps", rollup.Tps,
 					"createdAtValid", rollup.CreatedAt.Valid,
 					"blockStart", rollup.BlockStart,
 					"blockEnd", rollup.BlockEnd)
@@ -231,10 +226,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 				continue
 			}
 
-			if rollup.Bps < 0 || rollup.Tps < 0 {
-				s.logger.Debug("Skipping rollup with invalid performance data", "rollupId", rollup.ID, "bps", rollup.Bps, "tps", rollup.Tps)
-				continue
-			}
+			// TODO: Add BPS/TPS validation once added to schema
 
 			if rollup.BlockStart < 0 || rollup.BlockEnd <= 0 || rollup.BlockStart > rollup.BlockEnd {
 				s.logger.Debug("Skipping rollup with invalid block range", "rollupId", rollup.ID, "start", rollup.BlockStart, "end", rollup.BlockEnd)
@@ -261,8 +253,8 @@ func (s *Server) Dashboard(c echo.Context) error {
 				Timestamp:         rollup.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
 				ValidatorCount:    validatorCount,
 				HealthyValidators: healthyValidators,
-				BPS:               rollup.Bps,
-				TPS:               rollup.Tps,
+				BPS:               0.5, // TODO: Calculate from block range
+				TPS:               0.1, // TODO: Calculate from transaction count
 				BlockStart:        rollup.BlockStart,
 				BlockEnd:          rollup.BlockEnd,
 			}
@@ -311,9 +303,14 @@ func (s *Server) StatsHeaderFragment(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Get latest indexed block
-	latestBlockHeight, err := s.db.GetLatestIndexedBlock(ctx)
+	latestBlockHeightRaw, err := s.db.GetLatestIndexedBlock(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get latest block height", "error", err)
+		latestBlockHeightRaw = int64(0)
+	}
+	latestBlockHeight, ok := latestBlockHeightRaw.(int64)
+	if !ok {
+		s.logger.Warn("Failed to convert latest block height to int64")
 		latestBlockHeight = 0
 	}
 
@@ -349,20 +346,16 @@ func (s *Server) StatsHeaderFragment(c echo.Context) error {
 	// Get latest SLA rollup for BPS/TPS data
 	var bps float64 = 0
 	var avgBlockTime float32 = 0
-	latestSlaRollup, err := s.db.GetLatestSlaRollup(ctx)
+	_, err = s.db.GetLatestSLARollup(ctx)
 	if err != nil {
 		s.logger.Debug("Failed to get latest SLA rollup", "error", err)
 		// Fall back to default values
 		bps = 0.5
 		avgBlockTime = 2.0
 	} else {
-		bps = latestSlaRollup.Bps
-		// Calculate average block time from BPS (if BPS > 0)
-		if bps > 0 {
-			avgBlockTime = float32(1.0 / bps)
-		} else {
-			avgBlockTime = 2.0 // Default 2 seconds
-		}
+		// TODO: BPS/TPS are not in the SlaRollup struct - need to calculate or add to schema
+		bps = 0.5
+		avgBlockTime = 2.0
 	}
 
 	// Get active validator count
@@ -394,20 +387,21 @@ func (s *Server) TPSFragment(c echo.Context) error {
 
 	// Get latest SLA rollup for TPS data
 	var tps float64 = 0
-	latestSlaRollup, err := s.db.GetLatestSlaRollup(ctx)
+	_, err := s.db.GetLatestSLARollup(ctx)
 	if err != nil {
 		s.logger.Debug("Failed to get latest SLA rollup", "error", err)
 		// Fall back to default value
 		tps = 0.1
 	} else {
-		tps = latestSlaRollup.Tps
+		// TODO: TPS is not in the SlaRollup struct - need to calculate or add to schema
+		tps = 0.1
 	}
 
 	// Get dashboard transaction stats from materialized view
 	txStats, err := s.db.GetDashboardTransactionStats(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get dashboard transaction stats", "error", err)
-		txStats = db.DashboardTransactionStat{}
+		txStats = db.GetDashboardTransactionStatsRow{}
 	}
 
 	stats := &pages.DashboardStats{
@@ -427,7 +421,7 @@ func (s *Server) TotalTransactionsFragment(c echo.Context) error {
 	txStats, err := s.db.GetDashboardTransactionStats(ctx)
 	if err != nil {
 		s.logger.Warn("Failed to get dashboard transaction stats", "error", err)
-		txStats = db.DashboardTransactionStat{}
+		txStats = db.GetDashboardTransactionStatsRow{}
 	}
 
 	stats := &pages.DashboardStats{
