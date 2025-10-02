@@ -2001,6 +2001,92 @@ func (q *Queries) GetTransactionsByType(ctx context.Context, arg GetTransactions
 	return items, nil
 }
 
+const getTransactionsByTypeAndBlock = `-- name: GetTransactionsByTypeAndBlock :many
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+where tx_type = $1
+and block_height = $2
+order by tx_index asc
+`
+
+type GetTransactionsByTypeAndBlockParams struct {
+	TxType      string `json:"tx_type"`
+	BlockHeight int64  `json:"block_height"`
+}
+
+func (q *Queries) GetTransactionsByTypeAndBlock(ctx context.Context, arg GetTransactionsByTypeAndBlockParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByTypeAndBlock, arg.TxType, arg.BlockHeight)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.TxHash,
+			&i.BlockHeight,
+			&i.TxIndex,
+			&i.TxType,
+			&i.Proposer,
+			&i.Sender,
+			&i.Data,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTransactionsByTypeAndBlockRange = `-- name: GetTransactionsByTypeAndBlockRange :many
+select id, tx_hash, block_height, tx_index, tx_type, proposer, sender, data, created_at from transactions
+where tx_type = $1
+and block_height >= $2
+and block_height <= $3
+order by block_height, tx_index
+`
+
+type GetTransactionsByTypeAndBlockRangeParams struct {
+	TxType        string `json:"tx_type"`
+	BlockHeight   int64  `json:"block_height"`
+	BlockHeight_2 int64  `json:"block_height_2"`
+}
+
+func (q *Queries) GetTransactionsByTypeAndBlockRange(ctx context.Context, arg GetTransactionsByTypeAndBlockRangeParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByTypeAndBlockRange, arg.TxType, arg.BlockHeight, arg.BlockHeight_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.TxHash,
+			&i.BlockHeight,
+			&i.TxIndex,
+			&i.TxType,
+			&i.Proposer,
+			&i.Sender,
+			&i.Data,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getValidator = `-- name: GetValidator :one
 
 select address, comet_address, endpoint, node_type, spid, voting_power, status, registered_at, deregistered_at, created_at, updated_at from validators where address = $1

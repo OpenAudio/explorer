@@ -209,6 +209,46 @@ where block_time < (
 );
 
 -- ========================================
+-- indexer state management
+-- ========================================
+
+-- name: GetIndexerState :one
+select * from indexer_state
+where indexer_name = $1;
+
+-- name: UpsertIndexerState :exec
+insert into indexer_state (indexer_name, last_indexed_block, target_block, status, error_message, batch_size, last_run_at, updated_at)
+values ($1, $2, $3, $4, $5, $6, $7, now())
+on conflict (indexer_name) do update set
+    last_indexed_block = excluded.last_indexed_block,
+    target_block = excluded.target_block,
+    status = excluded.status,
+    error_message = excluded.error_message,
+    batch_size = excluded.batch_size,
+    last_run_at = excluded.last_run_at,
+    updated_at = now();
+
+-- name: UpdateIndexerProgress :exec
+update indexer_state set
+    last_indexed_block = $2,
+    status = $3,
+    error_message = null,
+    last_run_at = now(),
+    updated_at = now()
+where indexer_name = $1;
+
+-- name: UpdateIndexerError :exec
+update indexer_state set
+    status = 'error',
+    error_message = $2,
+    updated_at = now()
+where indexer_name = $1;
+
+-- name: GetAllIndexerStates :many
+select * from indexer_state
+order by indexer_name;
+
+-- ========================================
 -- batch operations
 -- ========================================
 

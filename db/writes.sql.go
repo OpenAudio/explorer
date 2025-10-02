@@ -186,6 +186,67 @@ func (q *Queries) DeleteValidatorEventsByValidator(ctx context.Context, validato
 	return err
 }
 
+const getAllIndexerStates = `-- name: GetAllIndexerStates :many
+select indexer_name, last_indexed_block, target_block, status, error_message, batch_size, last_run_at, created_at, updated_at from indexer_state
+order by indexer_name
+`
+
+func (q *Queries) GetAllIndexerStates(ctx context.Context) ([]IndexerState, error) {
+	rows, err := q.db.Query(ctx, getAllIndexerStates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IndexerState
+	for rows.Next() {
+		var i IndexerState
+		if err := rows.Scan(
+			&i.IndexerName,
+			&i.LastIndexedBlock,
+			&i.TargetBlock,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.BatchSize,
+			&i.LastRunAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getIndexerState = `-- name: GetIndexerState :one
+
+select indexer_name, last_indexed_block, target_block, status, error_message, batch_size, last_run_at, created_at, updated_at from indexer_state
+where indexer_name = $1
+`
+
+// ========================================
+// indexer state management
+// ========================================
+func (q *Queries) GetIndexerState(ctx context.Context, indexerName string) (IndexerState, error) {
+	row := q.db.QueryRow(ctx, getIndexerState, indexerName)
+	var i IndexerState
+	err := row.Scan(
+		&i.IndexerName,
+		&i.LastIndexedBlock,
+		&i.TargetBlock,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.BatchSize,
+		&i.LastRunAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const incrementTxTypeStats = `-- name: IncrementTxTypeStats :exec
 select increment_tx_type_stats($1, $2)
 `
@@ -536,6 +597,45 @@ func (q *Queries) UpdateChainStats(ctx context.Context, arg UpdateChainStatsPara
 	return err
 }
 
+const updateIndexerError = `-- name: UpdateIndexerError :exec
+update indexer_state set
+    status = 'error',
+    error_message = $2,
+    updated_at = now()
+where indexer_name = $1
+`
+
+type UpdateIndexerErrorParams struct {
+	IndexerName  string      `json:"indexer_name"`
+	ErrorMessage pgtype.Text `json:"error_message"`
+}
+
+func (q *Queries) UpdateIndexerError(ctx context.Context, arg UpdateIndexerErrorParams) error {
+	_, err := q.db.Exec(ctx, updateIndexerError, arg.IndexerName, arg.ErrorMessage)
+	return err
+}
+
+const updateIndexerProgress = `-- name: UpdateIndexerProgress :exec
+update indexer_state set
+    last_indexed_block = $2,
+    status = $3,
+    error_message = null,
+    last_run_at = now(),
+    updated_at = now()
+where indexer_name = $1
+`
+
+type UpdateIndexerProgressParams struct {
+	IndexerName      string `json:"indexer_name"`
+	LastIndexedBlock int64  `json:"last_indexed_block"`
+	Status           string `json:"status"`
+}
+
+func (q *Queries) UpdateIndexerProgress(ctx context.Context, arg UpdateIndexerProgressParams) error {
+	_, err := q.db.Exec(ctx, updateIndexerProgress, arg.IndexerName, arg.LastIndexedBlock, arg.Status)
+	return err
+}
+
 const updateValidatorStats = `-- name: UpdateValidatorStats :exec
 select update_validator_stats($1, $2, $3, $4)
 `
@@ -635,6 +735,42 @@ func (q *Queries) UpsertBlock(ctx context.Context, arg UpsertBlockParams) error 
 		arg.BlockTime,
 		arg.ProposerAddress,
 		arg.Data,
+	)
+	return err
+}
+
+const upsertIndexerState = `-- name: UpsertIndexerState :exec
+insert into indexer_state (indexer_name, last_indexed_block, target_block, status, error_message, batch_size, last_run_at, updated_at)
+values ($1, $2, $3, $4, $5, $6, $7, now())
+on conflict (indexer_name) do update set
+    last_indexed_block = excluded.last_indexed_block,
+    target_block = excluded.target_block,
+    status = excluded.status,
+    error_message = excluded.error_message,
+    batch_size = excluded.batch_size,
+    last_run_at = excluded.last_run_at,
+    updated_at = now()
+`
+
+type UpsertIndexerStateParams struct {
+	IndexerName      string           `json:"indexer_name"`
+	LastIndexedBlock int64            `json:"last_indexed_block"`
+	TargetBlock      int64            `json:"target_block"`
+	Status           string           `json:"status"`
+	ErrorMessage     pgtype.Text      `json:"error_message"`
+	BatchSize        int32            `json:"batch_size"`
+	LastRunAt        pgtype.Timestamp `json:"last_run_at"`
+}
+
+func (q *Queries) UpsertIndexerState(ctx context.Context, arg UpsertIndexerStateParams) error {
+	_, err := q.db.Exec(ctx, upsertIndexerState,
+		arg.IndexerName,
+		arg.LastIndexedBlock,
+		arg.TargetBlock,
+		arg.Status,
+		arg.ErrorMessage,
+		arg.BatchSize,
+		arg.LastRunAt,
 	)
 	return err
 }

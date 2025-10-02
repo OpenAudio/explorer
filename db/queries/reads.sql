@@ -96,6 +96,19 @@ where proposer = $1
 order by created_at desc
 limit $2 offset $3;
 
+-- name: GetTransactionsByTypeAndBlock :many
+select * from transactions
+where tx_type = $1
+and block_height = $2
+order by tx_index asc;
+
+-- name: GetTransactionsByTypeAndBlockRange :many
+select * from transactions
+where tx_type = $1
+and block_height >= $2
+and block_height <= $3
+order by block_height, tx_index;
+
 -- name: GetTransactionTypeStats :many
 select * from transaction_type_stats
 order by total_count desc;

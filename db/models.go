@@ -37,6 +37,18 @@ type ChainStat struct {
 	UpdatedAt           pgtype.Timestamp `json:"updated_at"`
 }
 
+type IndexerState struct {
+	IndexerName      string           `json:"indexer_name"`
+	LastIndexedBlock int64            `json:"last_indexed_block"`
+	TargetBlock      int64            `json:"target_block"`
+	Status           string           `json:"status"`
+	ErrorMessage     pgtype.Text      `json:"error_message"`
+	BatchSize        int32            `json:"batch_size"`
+	LastRunAt        pgtype.Timestamp `json:"last_run_at"`
+	CreatedAt        pgtype.Timestamp `json:"created_at"`
+	UpdatedAt        pgtype.Timestamp `json:"updated_at"`
+}
+
 type ManageEntity struct {
 	ID          int32            `json:"id"`
 	Address     string           `json:"address"`

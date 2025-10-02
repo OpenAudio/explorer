@@ -210,6 +210,25 @@ create index idx_storage_proof_verifications_block on storage_proof_verification
 create index idx_storage_proof_verifications_tx on storage_proof_verifications(tx_hash);
 
 -- ========================================
+-- INDEXER STATE TRACKING
+-- ========================================
+
+-- Indexer state: tracks the progress of each indexer independently
+create table if not exists indexer_state (
+    indexer_name text primary key,
+    last_indexed_block bigint not null default 0,
+    target_block bigint not null default 0,
+    status text not null default 'idle', -- idle, running, error
+    error_message text,
+    batch_size integer not null default 100,
+    last_run_at timestamp,
+    created_at timestamp not null default now(),
+    updated_at timestamp not null default now()
+);
+
+create index idx_indexer_state_status on indexer_state(status);
+
+-- ========================================
 -- STATS TABLES (SINGLE ROW FOR ATOMIC UPDATES)
 -- ========================================
 
@@ -508,6 +527,7 @@ drop table if exists validator_stats cascade;
 drop table if exists transaction_windows cascade;
 drop table if exists transaction_type_stats cascade;
 drop table if exists chain_stats cascade;
+drop table if exists indexer_state cascade;
 drop table if exists storage_proof_verifications cascade;
 drop table if exists storage_proofs cascade;
 drop table if exists manage_entities cascade;
