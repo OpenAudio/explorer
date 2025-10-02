@@ -266,11 +266,7 @@ func (s *Server) Dashboard(c echo.Context) error {
 				BlockStart:        rollup.BlockStart,
 				BlockEnd:          rollup.BlockEnd,
 			}
-
-			// Extra safety check - ensure we're not adding nil
-			if dataPoint != nil {
-				validDataPoints = append(validDataPoints, dataPoint)
-			}
+			validDataPoints = append(validDataPoints, dataPoint)
 		}
 
 		// Use the data if we have any valid points after filtering

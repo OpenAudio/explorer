@@ -2,55 +2,40 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
 	corev1 "github.com/AudiusProject/audiusd/pkg/api/core/v1"
-	"github.com/AudiusProject/audiusd/pkg/common"
-	"github.com/AudiusProject/audiusd/pkg/etl"
 	"github.com/AudiusProject/audiusd/pkg/sdk"
 	"github.com/AudiusProject/explorer/assets"
+	"github.com/AudiusProject/explorer/config"
+	"github.com/AudiusProject/explorer/db"
 	"github.com/labstack/echo/v4"
 )
 
 type Server struct {
-	env                string
-	e                  *echo.Echo
-	etl                *etl.ETLService
-	logger             *common.Logger
-	trustedNode        *sdk.AudiusdSDK
+	config      *config.Config
+	e           *echo.Echo
+	db          *db.Queries
+	logger      *slog.Logger
+	trustedNode *sdk.AudiusdSDK
+
 	latestTrustedBlock atomic.Int64
 	lastRefreshTime    atomic.Int64  // Unix timestamp of last refresh
 	refreshInterval    time.Duration // How often to refresh
 }
 
-func New(etl *etl.ETLService, e *echo.Echo, env string) *Server {
-	if e == nil {
-		e = echo.New()
-	}
-	if env == "" {
-		env = "prod"
-	}
-
-	trustedNodeURL := ""
-
-	switch env {
-	case "prod", "production", "mainnet":
-		trustedNodeURL = "rpc.audius.engineering"
-	case "staging", "stage", "testnet":
-		trustedNodeURL = "rpc.staging.audius.engineering"
-	case "dev":
-		trustedNodeURL = "rpc.dev.audius.engineering"
-	}
+func New(config *config.Config) *Server {
+	e := echo.New()
+	e.HideBanner = true
 
 	return &Server{
-		etl:             etl,
 		e:               e,
-		logger:          common.NewLogger(nil).Child("server"),
-		env:             env,
-		trustedNode:     sdk.NewAudiusdSDK(trustedNodeURL),
+		logger:          slog.Default(),
+		config:          config,
 		refreshInterval: 10 * time.Second,
 	}
 }
@@ -66,7 +51,7 @@ func (s *Server) Initialize() {
 	envMiddleware := func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Add environment to the request context
-			ctx := context.WithValue(c.Request().Context(), "env", s.env)
+			ctx := context.WithValue(c.Request().Context(), "env", s.config.Environment)
 			c.SetRequest(c.Request().WithContext(ctx))
 			return next(c)
 		}
