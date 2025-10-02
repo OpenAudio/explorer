@@ -104,4 +104,5 @@ func (s *Server) LiveEventsSSE(c echo.Context) error {
 
 	// 	}
 	// }
+	return nil
 }

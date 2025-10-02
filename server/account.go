@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/OpenAudio/explorer/templates/pages"
 	"github.com/OpenAudio/explorer/db"
+	"github.com/OpenAudio/explorer/templates/pages"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
@@ -124,17 +124,13 @@ func (s *Server) Account(c echo.Context) error {
 	if err != nil {
 		s.logger.Error("Failed to get relation types for address", "address", address, "error", err)
 		// Don't fail the request, just log the error
-		relationTypesRaw = []interface{}{}
+		relationTypesRaw = []string{}
 	}
 
 	// Convert interface{} slice to string slice
 	relationTypes := make([]string, len(relationTypesRaw))
 	for i, rt := range relationTypesRaw {
-		if str, ok := rt.(string); ok {
-			relationTypes[i] = str
-		} else {
-			relationTypes[i] = fmt.Sprintf("%v", rt)
-		}
+		relationTypes[i] = rt
 	}
 
 	// Convert transaction rows to transactions and extract relations
@@ -150,11 +146,7 @@ func (s *Server) Account(c echo.Context) error {
 			CreatedAt:   row.CreatedAt,
 		}
 		// Handle relation type assertion
-		if str, ok := row.Relation.(string); ok {
-			txRelations[i] = str
-		} else {
-			txRelations[i] = fmt.Sprintf("%v", row.Relation)
-		}
+		txRelations[i] = row.Relation
 	}
 
 	// Calculate pagination state

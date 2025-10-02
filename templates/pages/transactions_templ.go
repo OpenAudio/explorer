@@ -10,13 +10,13 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
+	"github.com/OpenAudio/explorer/db"
 	"github.com/OpenAudio/explorer/templates"
 	"github.com/OpenAudio/explorer/templates/layouts"
 )
 
 type TransactionsProps struct {
-	Transactions []*db.EtlTransaction
+	Transactions []*db.Transaction
 	BlockHeights map[string]int64
 	CurrentPage  int32
 	HasNext      bool

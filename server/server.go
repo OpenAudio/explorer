@@ -2,17 +2,19 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
-	corev1 "github.com/OpenAudio/go-openaudio/pkg/api/core/v1"
-	"github.com/OpenAudio/go-openaudio/pkg/sdk"
 	"github.com/OpenAudio/explorer/assets"
 	"github.com/OpenAudio/explorer/config"
 	"github.com/OpenAudio/explorer/db"
+	corev1 "github.com/OpenAudio/go-openaudio/pkg/api/core/v1"
+	"github.com/OpenAudio/go-openaudio/pkg/sdk"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 )
 
@@ -21,7 +23,7 @@ type Server struct {
 	e           *echo.Echo
 	db          *db.Queries
 	logger      *slog.Logger
-	trustedNode *sdk.AudiusdSDK
+	trustedNode *sdk.OpenAudioSDK
 	chainID     string
 
 	latestTrustedBlock atomic.Int64
@@ -41,7 +43,15 @@ func New(config *config.Config) *Server {
 	}
 }
 
-func (s *Server) Initialize() {
+func (s *Server) Initialize() error {
+	// Initialize database connection
+	connString := fmt.Sprintf("postgres://postgres:postgres@localhost:5444/audiusd?sslmode=disable")
+	pool, err := pgxpool.New(context.Background(), connString)
+	if err != nil {
+		return fmt.Errorf("failed to create database connection pool: %w", err)
+	}
+	s.db = db.New(pool)
+
 	// start refresher
 	go s.refreshTrustedBlock()
 
@@ -116,6 +126,8 @@ func (s *Server) Initialize() {
 	e.GET("/fragments/stats-header", s.StatsHeaderFragment)
 	e.GET("/fragments/tps", s.TPSFragment)
 	e.GET("/fragments/total-transactions", s.TotalTransactionsFragment)
+
+	return nil
 }
 
 func (s *Server) Start() error {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OpenAudio/explorer/templates/pages"
 	"github.com/OpenAudio/explorer/db"
+	"github.com/OpenAudio/explorer/templates/pages"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
 )
@@ -95,9 +95,8 @@ func (s *Server) Validators(c echo.Context) error {
 		// Convert registrations to validator format for template
 		for i := range regsData {
 			validator := &db.Validator{
-				ID:           regsData[i].ID,
 				Address:      regsData[i].Address,
-				Endpoint:     regsData[i].Endpoint,     // Already a string
+				Endpoint:     regsData[i].Endpoint, // Already a string
 				CometAddress: regsData[i].CometAddress,
 				NodeType:     regsData[i].NodeType,    // Already a string
 				Spid:         regsData[i].Spid,        // Already a string
@@ -142,7 +141,6 @@ func (s *Server) Validators(c echo.Context) error {
 			}
 
 			validator := &db.Validator{
-				ID:           deregsData[i].ID,
 				Address:      "",
 				Endpoint:     endpoint,
 				CometAddress: deregsData[i].CometAddress,
@@ -313,8 +311,8 @@ func (s *Server) ValidatorsUptimeByRollup(c echo.Context) error {
 	// Calculate challenge statistics dynamically for this rollup's block range
 	// This ensures we get the current accurate data instead of potentially stale pre-calculated values
 	challengeStats, err := s.db.GetChallengeStatisticsForBlockRange(ctx, db.GetChallengeStatisticsForBlockRangeParams{
-		Height:   rollupInfo.BlockStart,
-		Height_2: rollupInfo.BlockEnd,
+		BlockStart: rollupInfo.BlockStart,
+		BlockEnd:   rollupInfo.BlockEnd,
 	})
 	if err != nil {
 		s.logger.Warn("Failed to get challenge statistics", "rollupID", rollupID, "error", err)
@@ -331,7 +329,6 @@ func (s *Server) ValidatorsUptimeByRollup(c echo.Context) error {
 	validators := make([]*pages.ValidatorUptimeInfo, 0, len(validatorsData))
 	for i := range validatorsData {
 		validator := &db.Validator{
-			ID:           validatorsData[i].ID,
 			Address:      validatorsData[i].Address,
 			Endpoint:     validatorsData[i].Endpoint,
 			CometAddress: validatorsData[i].CometAddress,
@@ -348,13 +345,11 @@ func (s *Server) ValidatorsUptimeByRollup(c echo.Context) error {
 		var reportPointers []*db.SlaNodeReport
 		slaReport := &db.SlaNodeReport{
 			SlaRollupID:        int32(rollupID),
-			Address:            validatorsData[i].CometAddress,
+			ValidatorAddress:   validatorsData[i].CometAddress,
 			NumBlocksProposed:  0, // Default to 0
 			ChallengesReceived: 0, // Default to 0
 			ChallengesFailed:   0, // Default to 0
-			TxHash:             rollupInfo.TxHash,
 			CreatedAt:          rollupInfo.CreatedAt,
-			BlockHeight:        rollupInfo.BlockHeight,
 		}
 
 		// Override with actual data if validator has report data (for blocks proposed)

@@ -3,9 +3,9 @@ package pages
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/OpenAudio/explorer/db"
 	"github.com/OpenAudio/explorer/templates"
 	"github.com/OpenAudio/explorer/templates/layouts"
-	"github.com/AudiusProject/audiusd/pkg/etl/db"
 	"regexp"
 )
 
@@ -47,7 +47,7 @@ func highlightJSON(jsonStr string) string {
 }
 
 type TransactionProps struct {
-	Transaction *db.EtlTransaction
+	Transaction *db.Transaction
 	Proposer    string
 	Content     interface{}
 }
@@ -109,20 +109,18 @@ templ Transaction(props TransactionProps) {
 			</div>
 			<!-- Transaction Content Based on Type -->
 			switch props.Content.(type) {
-				case []*db.EtlPlay:
-					@TrackPlaysSection(props.Content.([]*db.EtlPlay))
-				case *db.EtlManageEntity:
-					@ManageEntitySection(props.Content.(*db.EtlManageEntity))
-				case *db.EtlValidatorRegistration:
-					@ValidatorRegistrationSection(props.Content.(*db.EtlValidatorRegistration))
-				case *db.EtlValidatorDeregistration:
-					@ValidatorDeregistrationSection(props.Content.(*db.EtlValidatorDeregistration))
-				case *db.EtlSlaRollup:
-					@SlaRollupSection(props.Content.(*db.EtlSlaRollup))
-				case *db.EtlStorageProof:
-					@StorageProofSection(props.Content.(*db.EtlStorageProof))
-				case *db.EtlStorageProofVerification:
-					@StorageProofVerificationSection(props.Content.(*db.EtlStorageProofVerification))
+				case []*db.Play:
+					@TrackPlaysSection(props.Content.([]*db.Play))
+				case *db.ManageEntity:
+					@ManageEntitySection(props.Content.(*db.ManageEntity))
+				case *db.Validator:
+					@ValidatorRegistrationSection(props.Content.(*db.Validator))
+				case *db.SlaRollup:
+					@SlaRollupSection(props.Content.(*db.SlaRollup))
+				case *db.StorageProof:
+					@StorageProofSection(props.Content.(*db.StorageProof))
+				case *db.StorageProofVerification:
+					@StorageProofVerificationSection(props.Content.(*db.StorageProofVerification))
 				default:
 					<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 						<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Transaction Content</h3>
@@ -133,7 +131,7 @@ templ Transaction(props TransactionProps) {
 	}
 }
 
-templ TrackPlaysSection(plays []*db.EtlPlay) {
+templ TrackPlaysSection(plays []*db.Play) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Track Plays ({ fmt.Sprintf("%d", len(plays)) })</h3>
 		<div class="overflow-x-auto">
@@ -177,7 +175,7 @@ templ TrackPlaysSection(plays []*db.EtlPlay) {
 	</div>
 }
 
-templ ManageEntitySection(entity *db.EtlManageEntity) {
+templ ManageEntitySection(entity *db.ManageEntity) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Manage Entity</h3>
 		<div class="overflow-x-auto">
@@ -212,12 +210,12 @@ templ ManageEntitySection(entity *db.EtlManageEntity) {
 				</tbody>
 			</table>
 			<!-- JSON View of metadata -->
-			if entity.Metadata.Valid {
+			if len(entity.Metadata) > 0 {
 				<div class="mt-4">
 					<h4 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Metadata</h4>
 					<div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto border border-gray-200 dark:border-gray-700">
 						<pre class="text-sm font-mono leading-relaxed whitespace-pre-wrap">
-							@templ.Raw(highlightJSON(string(entity.Metadata.String)))
+							@templ.Raw(highlightJSON(string(entity.Metadata)))
 						</pre>
 					</div>
 				</div>
@@ -226,7 +224,7 @@ templ ManageEntitySection(entity *db.EtlManageEntity) {
 	</div>
 }
 
-templ ValidatorRegistrationSection(registration *db.EtlValidatorRegistration) {
+templ ValidatorRegistrationSection(registration *db.Validator) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Validator Registrations 1</h3>
 		<div class="overflow-x-auto">
@@ -235,9 +233,11 @@ templ ValidatorRegistrationSection(registration *db.EtlValidatorRegistration) {
 					<tr class="border-b border-gray-200 dark:border-gray-700">
 						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">Address</th>
 						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">Comet Address</th>
+						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">Endpoint</th>
 						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">Node Type</th>
 						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">Voting Power</th>
 						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">SPID</th>
+						<th class="text-left py-2 px-4 font-medium text-gray-900 dark:text-gray-100">Status</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -251,9 +251,15 @@ templ ValidatorRegistrationSection(registration *db.EtlValidatorRegistration) {
 							<td class="py-2 px-4">
 								@templates.StringWithTooltip(registration.CometAddress)
 							</td>
+							<td class="py-2 px-4">{ registration.Endpoint }</td>
 							<td class="py-2 px-4">{ registration.NodeType }</td>
 							<td class="py-2 px-4">{ fmt.Sprintf("%d", registration.VotingPower) }</td>
 							<td class="py-2 px-4">{ registration.Spid }</td>
+							<td class="py-2 px-4">
+								<span class="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+									{ registration.Status }
+								</span>
+							</td>
 						</tr>
 					}
 				</tbody>
@@ -262,7 +268,7 @@ templ ValidatorRegistrationSection(registration *db.EtlValidatorRegistration) {
 	</div>
 }
 
-templ ValidatorDeregistrationSection(deregistration *db.EtlValidatorDeregistration) {
+templ ValidatorDeregistrationSection(deregistration *db.Validator) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Validator Deregistrations 1</h3>
 		<div class="overflow-x-auto">
@@ -282,7 +288,7 @@ templ ValidatorDeregistrationSection(deregistration *db.EtlValidatorDeregistrati
 								</a>
 							</td>
 							<td class="py-2 px-4">
-								@templates.StringWithTooltip(fmt.Sprintf("%x", deregistration.CometPubkey))
+								{ deregistration.Address }
 							</td>
 						</tr>
 					}
@@ -292,7 +298,7 @@ templ ValidatorDeregistrationSection(deregistration *db.EtlValidatorDeregistrati
 	</div>
 }
 
-templ SlaRollupSection(slaRollup *db.EtlSlaRollup) {
+templ SlaRollupSection(slaRollup *db.SlaRollup) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">SLA Rollup</h3>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -318,7 +324,7 @@ templ SlaRollupSection(slaRollup *db.EtlSlaRollup) {
 	</div>
 }
 
-templ StorageProofSection(storageProof *db.EtlStorageProof) {
+templ StorageProofSection(storageProof *db.StorageProof) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Storage Proof</h3>
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -327,51 +333,55 @@ templ StorageProofSection(storageProof *db.EtlStorageProof) {
 				<p class="text-gray-900 dark:text-gray-100">{ fmt.Sprintf("%d", storageProof.BlockHeight) }</p>
 			</div>
 			<div>
-				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prover Address</label>
 				<p class="text-gray-900 dark:text-gray-100">
-					@templates.StringWithTooltip(storageProof.Address)
+					@templates.StringWithTooltip(storageProof.ProverAddress)
 				</p>
 			</div>
 			<div>
-				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">CID</label>
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Challenge ID</label>
 				<p class="text-gray-900 dark:text-gray-100">
-					@templates.StringWithTooltip(storageProof.Cid)
+					@templates.StringWithTooltip(storageProof.ChallengeID)
 				</p>
 			</div>
 			<div class="md:col-span-2 lg:col-span-3">
-				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prover Addresses</label>
-				<div class="flex flex-wrap gap-2">
-					for _, addr := range storageProof.ProverAddresses {
-						<span class="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-							@templates.StringWithTooltip(addr)
-						</span>
-					}
-				</div>
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proof Data</label>
+				<p class="text-gray-900 dark:text-gray-100">
+					@templates.StringWithTooltip(fmt.Sprintf("%x", storageProof.ProofData))
+				</p>
 			</div>
-			if storageProof.ProofSignature != nil {
-				<div class="md:col-span-2 lg:col-span-3">
-					<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proof Signature</label>
-					<p class="text-gray-900 dark:text-gray-100">
-						@templates.StringWithTooltip(fmt.Sprintf("%x", storageProof.ProofSignature))
-					</p>
-				</div>
-			}
 		</div>
 	</div>
 }
 
-templ StorageProofVerificationSection(storageProofVerification *db.EtlStorageProofVerification) {
+templ StorageProofVerificationSection(storageProofVerification *db.StorageProofVerification) {
 	<div class="shadow-xl rounded-lg p-6 bg-white dark:bg-gray-800">
 		<h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Storage Proof Verification</h3>
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			<div>
 				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Height</label>
-				<p class="text-gray-900 dark:text-gray-100">{ fmt.Sprintf("%d", storageProofVerification.Height) }</p>
+				<p class="text-gray-900 dark:text-gray-100">{ fmt.Sprintf("%d", storageProofVerification.BlockHeight) }</p>
 			</div>
 			<div>
-				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proof</label>
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Challenge ID</label>
 				<p class="text-gray-900 dark:text-gray-100">
-					@templates.StringWithTooltip(fmt.Sprintf("%x", storageProofVerification.Proof))
+					@templates.StringWithTooltip(storageProofVerification.ChallengeID)
+				</p>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Verifier Address</label>
+				<p class="text-gray-900 dark:text-gray-100">
+					@templates.StringWithTooltip(storageProofVerification.VerifierAddress)
+				</p>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Is Valid</label>
+				<p class="text-gray-900 dark:text-gray-100">{ fmt.Sprintf("%t", storageProofVerification.IsValid) }</p>
+			</div>
+			<div class="md:col-span-2">
+				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Verification Data</label>
+				<p class="text-gray-900 dark:text-gray-100">
+					@templates.StringWithTooltip(fmt.Sprintf("%x", storageProofVerification.VerificationData))
 				</p>
 			</div>
 		</div>
