@@ -5,6 +5,7 @@ run:
 		trap "echo Stopping...; kill 0" SIGINT; \
 		$(MAKE) tailwind-watch & \
 		$(MAKE) templ-watch & \
+		$(MAKE) sqlc-watch & \
 		$(MAKE) go-watch & \
 		wait'
 
@@ -29,4 +30,4 @@ tailwind-install:
 	mv tailwindcss-macos-arm64 ./tmp/tailwindcss
 
 pg:
-	docker run --name audiusd-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=audiusd -d -p 5444:5432 postgres
+	docker run --name explorer-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=explorer -d -p 5444:5432 postgres

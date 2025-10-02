@@ -10,3 +10,5 @@ tmp
 .release_notes.md
 
 contracts/build
+
+.env
